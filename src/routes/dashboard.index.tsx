@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { walletStats, growthChart, transactions, plans } from "@/lib/mock-data";
+import { growthChart, plans } from "@/lib/mock-data";
+import { useWallet } from "@/lib/wallet-store";
 import { formatNaira } from "@/lib/format";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -17,22 +18,22 @@ export const Route = createFileRoute("/dashboard/")({
   component: DashboardHome,
 });
 
-const stats = [
-  { key: "walletBalance",   label: "Wallet balance",       icon: Wallet,           tone: "ink" as const },
-  { key: "available",       label: "Available balance",    icon: PiggyBank },
-  { key: "activeInvestments", label: "Active investments", icon: LineIcon },
-  { key: "totalProfit",     label: "Total profit",         icon: TrendingUp, tone: "success" as const },
-  { key: "totalDeposits",   label: "Total deposits",       icon: ArrowDownToLine },
-  { key: "totalWithdrawals",label: "Total withdrawals",    icon: ArrowUpFromLine },
-  { key: "referralEarnings",label: "Referral earnings",    icon: Users },
-];
-
 function DashboardHome() {
+  const wallet = useWallet();
+  const stats = [
+    { key: "balance",           label: "Wallet balance",     value: wallet.balance,          icon: Wallet,           tone: "ink" as const },
+    { key: "available",         label: "Available balance",  value: wallet.available,        icon: PiggyBank },
+    { key: "locked",            label: "Active investments", value: wallet.locked,           icon: LineIcon },
+    { key: "profit",            label: "Total profit",       value: wallet.profit,           icon: TrendingUp, tone: "success" as const },
+    { key: "totalDeposits",     label: "Total deposits",     value: wallet.totalDeposits,    icon: ArrowDownToLine },
+    { key: "totalWithdrawals",  label: "Total withdrawals",  value: wallet.totalWithdrawals, icon: ArrowUpFromLine },
+    { key: "referralEarnings",  label: "Referral earnings",  value: 96_500,                  icon: Users },
+  ];
   return (
     <DashboardLayout title="Good evening, Adaeze">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s, i) => {
-          const value = (walletStats as any)[s.key] as number;
+          const value = s.value;
           const isInk = s.tone === "ink";
           return (
             <motion.div
@@ -109,7 +110,7 @@ function DashboardHome() {
             <Button asChild variant="ghost" size="sm"><Link to="/dashboard/transactions">View all <ArrowRight className="h-4 w-4" /></Link></Button>
           </div>
           <div className="mt-4 divide-y divide-border">
-            {transactions.slice(0, 5).map((t) => (
+            {wallet.transactions.slice(0, 5).map((t) => (
               <div key={t.id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm font-medium">{t.type}</p>

@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { transactions, walletStats } from "@/lib/mock-data";
 import { formatNaira } from "@/lib/format";
+import { useWallet } from "@/lib/wallet-store";
+import type { Transaction } from "@/lib/mock-data";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/dashboard/wallet")({
   head: () => ({ meta: [{ title: "Wallet — SILVER SPOON" }] }),
@@ -17,16 +18,17 @@ export const Route = createFileRoute("/dashboard/wallet")({
 });
 
 function WalletPage() {
+  const wallet = useWallet();
   return (
     <DashboardLayout title="Wallet">
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card-premium bg-gradient-ink p-6 text-primary-foreground lg:col-span-2">
           <p className="text-xs uppercase tracking-widest opacity-70">Current balance</p>
-          <p className="font-display mt-2 text-5xl">{formatNaira(walletStats.walletBalance)}</p>
+          <p className="font-display mt-2 text-5xl">{formatNaira(wallet.balance)}</p>
           <div className="mt-8 grid grid-cols-3 gap-4 text-sm">
-            <Stat label="Available" value={formatNaira(walletStats.available)} />
-            <Stat label="Locked" value={formatNaira(walletStats.activeInvestments)} />
-            <Stat label="Profit" value={formatNaira(walletStats.totalProfit)} />
+            <Stat label="Available" value={formatNaira(wallet.available)} />
+            <Stat label="Locked" value={formatNaira(wallet.locked)} />
+            <Stat label="Profit" value={formatNaira(wallet.profit)} />
           </div>
         </div>
         <div className="card-premium p-6">
@@ -53,10 +55,10 @@ function WalletPage() {
               <TabsTrigger value="other">Other</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="all" className="mt-4"><HistoryTable filter={() => true} /></TabsContent>
-          <TabsContent value="deposits" className="mt-4"><HistoryTable filter={(t) => t.type === "Deposit"} /></TabsContent>
-          <TabsContent value="withdrawals" className="mt-4"><HistoryTable filter={(t) => t.type === "Withdrawal"} /></TabsContent>
-          <TabsContent value="other" className="mt-4"><HistoryTable filter={(t) => t.type !== "Deposit" && t.type !== "Withdrawal"} /></TabsContent>
+          <TabsContent value="all" className="mt-4"><HistoryTable filter={() => true} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="deposits" className="mt-4"><HistoryTable filter={(t) => t.type === "Deposit"} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="withdrawals" className="mt-4"><HistoryTable filter={(t) => t.type === "Withdrawal"} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="other" className="mt-4"><HistoryTable filter={(t) => t.type !== "Deposit" && t.type !== "Withdrawal"} txns={wallet.transactions} /></TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
@@ -74,12 +76,29 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   const isDeposit = type === "deposit";
+  const wallet = useWallet();
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState(isDeposit ? "transfer" : "gtbank");
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    toast.success(isDeposit ? "Deposit initiated" : "Withdrawal requested", {
-      description: isDeposit ? "Funds will reflect once payment clears." : "Your bank will be credited within 15 minutes.",
-    });
-    (e.target as HTMLFormElement).reset();
+    const value = Math.floor(Number(amount));
+    if (!Number.isFinite(value) || value < 1000) {
+      toast.error("Enter a valid amount", { description: "Minimum amount is ₦1,000." });
+      return;
+    }
+    if (isDeposit) {
+      wallet.deposit(value, method);
+      toast.success("Deposit successful", { description: `${formatNaira(value)} added to your wallet.` });
+    } else {
+      const res = wallet.withdraw(value, method);
+      if ("error" in res) {
+        toast.error("Withdrawal failed", { description: res.error });
+        return;
+      }
+      toast.success("Withdrawal requested", { description: `${formatNaira(value)} is on its way to your bank.` });
+    }
+    setAmount("");
   };
   return (
     <form onSubmit={onSubmit} className="card-premium p-6">
@@ -95,11 +114,11 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
       <div className="mt-6 space-y-4">
         <div className="space-y-1.5">
           <Label>Amount (₦)</Label>
-          <Input type="number" min={1000} step={1000} required placeholder="₦ 100,000" />
+          <Input type="number" min={1000} step={1000} required placeholder="₦ 100,000" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>{isDeposit ? "Method" : "Destination"}</Label>
-          <Select defaultValue={isDeposit ? "transfer" : "gtbank"}>
+          <Select value={method} onValueChange={setMethod}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {isDeposit ? (
@@ -123,8 +142,8 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   );
 }
 
-function HistoryTable({ filter }: { filter: (t: (typeof transactions)[number]) => boolean }) {
-  const rows = transactions.filter(filter);
+function HistoryTable({ filter, txns }: { filter: (t: Transaction) => boolean; txns: Transaction[] }) {
+  const rows = txns.filter(filter);
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-sm">
