@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatNaira } from "@/lib/format";
-import { useWallet, type WalletState } from "@/lib/wallet-store";
+import { useWallet } from "@/lib/wallet-store";
+import type { Transaction } from "@/lib/mock-data";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { useState, type FormEvent } from "react";
@@ -113,11 +114,11 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
       <div className="mt-6 space-y-4">
         <div className="space-y-1.5">
           <Label>Amount (₦)</Label>
-          <Input type="number" min={1000} step={1000} required placeholder="₦ 100,000" />
+          <Input type="number" min={1000} step={1000} required placeholder="₦ 100,000" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>{isDeposit ? "Method" : "Destination"}</Label>
-          <Select defaultValue={isDeposit ? "transfer" : "gtbank"}>
+          <Select value={method} onValueChange={setMethod}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {isDeposit ? (
@@ -141,8 +142,8 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   );
 }
 
-function HistoryTable({ filter }: { filter: (t: (typeof transactions)[number]) => boolean }) {
-  const rows = transactions.filter(filter);
+function HistoryTable({ filter, txns }: { filter: (t: Transaction) => boolean; txns: Transaction[] }) {
+  const rows = txns.filter(filter);
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-sm">
