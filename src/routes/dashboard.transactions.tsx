@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { transactions } from "@/lib/mock-data";
+import { useWallet } from "@/lib/wallet-store";
 import { formatNaira } from "@/lib/format";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -20,6 +20,7 @@ function TransactionsPage() {
   const [type, setType] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
+  const { transactions } = useWallet();
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -28,7 +29,7 @@ function TransactionsPage() {
       if (q && !`${t.id} ${t.type} ${t.method}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [q, type, status]);
+  }, [q, type, status, transactions]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const view = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
