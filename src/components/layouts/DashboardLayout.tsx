@@ -8,7 +8,6 @@ import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { WalletProvider } from "@/lib/wallet-store";
 
 type Item = { to: string; label: string; icon: ComponentType<{ className?: string }> };
 
@@ -156,11 +155,7 @@ function AppShell({
 export function DashboardLayout({
   children, title, right,
 }: { children: ReactNode; title: string; right?: ReactNode }) {
-  return (
-    <WalletProvider>
-      <AppShell items={userNav} title={title} right={right}>{children}</AppShell>
-    </WalletProvider>
-  );
+  return <AppShell items={userNav} title={title} right={right}>{children}</AppShell>;
 }
 
 export function AdminLayout({
