@@ -54,10 +54,10 @@ function WalletPage() {
               <TabsTrigger value="other">Other</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="all" className="mt-4"><HistoryTable filter={() => true} /></TabsContent>
-          <TabsContent value="deposits" className="mt-4"><HistoryTable filter={(t) => t.type === "Deposit"} /></TabsContent>
-          <TabsContent value="withdrawals" className="mt-4"><HistoryTable filter={(t) => t.type === "Withdrawal"} /></TabsContent>
-          <TabsContent value="other" className="mt-4"><HistoryTable filter={(t) => t.type !== "Deposit" && t.type !== "Withdrawal"} /></TabsContent>
+          <TabsContent value="all" className="mt-4"><HistoryTable filter={() => true} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="deposits" className="mt-4"><HistoryTable filter={(t) => t.type === "Deposit"} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="withdrawals" className="mt-4"><HistoryTable filter={(t) => t.type === "Withdrawal"} txns={wallet.transactions} /></TabsContent>
+          <TabsContent value="other" className="mt-4"><HistoryTable filter={(t) => t.type !== "Deposit" && t.type !== "Withdrawal"} txns={wallet.transactions} /></TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
@@ -75,12 +75,29 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   const isDeposit = type === "deposit";
+  const wallet = useWallet();
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState(isDeposit ? "transfer" : "gtbank");
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    toast.success(isDeposit ? "Deposit initiated" : "Withdrawal requested", {
-      description: isDeposit ? "Funds will reflect once payment clears." : "Your bank will be credited within 15 minutes.",
-    });
-    (e.target as HTMLFormElement).reset();
+    const value = Math.floor(Number(amount));
+    if (!Number.isFinite(value) || value < 1000) {
+      toast.error("Enter a valid amount", { description: "Minimum amount is ₦1,000." });
+      return;
+    }
+    if (isDeposit) {
+      wallet.deposit(value, method);
+      toast.success("Deposit successful", { description: `${formatNaira(value)} added to your wallet.` });
+    } else {
+      const res = wallet.withdraw(value, method);
+      if ("error" in res) {
+        toast.error("Withdrawal failed", { description: res.error });
+        return;
+      }
+      toast.success("Withdrawal requested", { description: `${formatNaira(value)} is on its way to your bank.` });
+    }
+    setAmount("");
   };
   return (
     <form onSubmit={onSubmit} className="card-premium p-6">
