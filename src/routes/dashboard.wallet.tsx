@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { transactions, walletStats } from "@/lib/mock-data";
 import { formatNaira } from "@/lib/format";
+import { useWallet, type WalletState } from "@/lib/wallet-store";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/dashboard/wallet")({
   head: () => ({ meta: [{ title: "Wallet — SILVER SPOON" }] }),
@@ -17,16 +17,17 @@ export const Route = createFileRoute("/dashboard/wallet")({
 });
 
 function WalletPage() {
+  const wallet = useWallet();
   return (
     <DashboardLayout title="Wallet">
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card-premium bg-gradient-ink p-6 text-primary-foreground lg:col-span-2">
           <p className="text-xs uppercase tracking-widest opacity-70">Current balance</p>
-          <p className="font-display mt-2 text-5xl">{formatNaira(walletStats.walletBalance)}</p>
+          <p className="font-display mt-2 text-5xl">{formatNaira(wallet.balance)}</p>
           <div className="mt-8 grid grid-cols-3 gap-4 text-sm">
-            <Stat label="Available" value={formatNaira(walletStats.available)} />
-            <Stat label="Locked" value={formatNaira(walletStats.activeInvestments)} />
-            <Stat label="Profit" value={formatNaira(walletStats.totalProfit)} />
+            <Stat label="Available" value={formatNaira(wallet.available)} />
+            <Stat label="Locked" value={formatNaira(wallet.locked)} />
+            <Stat label="Profit" value={formatNaira(wallet.profit)} />
           </div>
         </div>
         <div className="card-premium p-6">
