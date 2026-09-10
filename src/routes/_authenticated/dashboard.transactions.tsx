@@ -8,7 +8,7 @@ import { formatNaira } from "@/lib/format";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 
-export const Route = createFileRoute("/dashboard/transactions")({
+export const Route = createFileRoute("/_authenticated/dashboard/transactions")({
   head: () => ({ meta: [{ title: "Transactions — SILVER SPOON" }] }),
   component: TransactionsPage,
 });

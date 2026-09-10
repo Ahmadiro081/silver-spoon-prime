@@ -8,7 +8,7 @@ import { useTheme } from "@/lib/theme";
 import { Moon, Sun, Monitor } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/dashboard/settings")({
+export const Route = createFileRoute("/_authenticated/dashboard/settings")({
   head: () => ({ meta: [{ title: "Settings — SILVER SPOON" }] }),
   component: Settings,
 });

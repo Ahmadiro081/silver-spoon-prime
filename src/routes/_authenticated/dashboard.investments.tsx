@@ -10,7 +10,7 @@ import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
-export const Route = createFileRoute("/dashboard/investments")({
+export const Route = createFileRoute("/_authenticated/dashboard/investments")({
   head: () => ({ meta: [{ title: "Investments — SILVER SPOON" }] }),
   component: Investments,
 });

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Download } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/admin/reports")({
+export const Route = createFileRoute("/_authenticated/admin/reports")({
   head: () => ({ meta: [{ title: "Reports — Admin" }] }),
   component: () => (
     <AdminLayout title="Reports">

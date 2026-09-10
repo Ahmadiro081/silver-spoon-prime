@@ -19,29 +19,29 @@ import { Route as InvestmentPlansRouteImport } from './routes/investment-plans'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FaqRouteImport } from './routes/faq'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
-import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as DashboardWalletRouteImport } from './routes/dashboard.wallet'
-import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
-import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
-import { Route as DashboardReferralsRouteImport } from './routes/dashboard.referrals'
-import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
-import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
-import { Route as DashboardInvestmentsRouteImport } from './routes/dashboard.investments'
-import { Route as AdminWithdrawalsRouteImport } from './routes/admin.withdrawals'
-import { Route as AdminUsersRouteImport } from './routes/admin.users'
-import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
-import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
-import { Route as AdminReportsRouteImport } from './routes/admin.reports'
-import { Route as AdminPlansRouteImport } from './routes/admin.plans'
-import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
-import { Route as AdminDepositsRouteImport } from './routes/admin.deposits'
-import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedDashboardWalletRouteImport } from './routes/_authenticated/dashboard.wallet'
+import { Route as AuthenticatedDashboardTransactionsRouteImport } from './routes/_authenticated/dashboard.transactions'
+import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard.settings'
+import { Route as AuthenticatedDashboardReferralsRouteImport } from './routes/_authenticated/dashboard.referrals'
+import { Route as AuthenticatedDashboardProfileRouteImport } from './routes/_authenticated/dashboard.profile'
+import { Route as AuthenticatedDashboardNotificationsRouteImport } from './routes/_authenticated/dashboard.notifications'
+import { Route as AuthenticatedDashboardInvestmentsRouteImport } from './routes/_authenticated/dashboard.investments'
+import { Route as AuthenticatedAdminWithdrawalsRouteImport } from './routes/_authenticated/admin.withdrawals'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
+import { Route as AuthenticatedAdminTransactionsRouteImport } from './routes/_authenticated/admin.transactions'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
+import { Route as AuthenticatedAdminReportsRouteImport } from './routes/_authenticated/admin.reports'
+import { Route as AuthenticatedAdminPlansRouteImport } from './routes/_authenticated/admin.plans'
+import { Route as AuthenticatedAdminNotificationsRouteImport } from './routes/_authenticated/admin.notifications'
+import { Route as AuthenticatedAdminDepositsRouteImport } from './routes/_authenticated/admin.deposits'
+import { Route as AuthenticatedAdminAnalyticsRouteImport } from './routes/_authenticated/admin.analytics'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -93,19 +93,9 @@ const FaqRoute = FaqRouteImport.update({
   path: '/faq',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -118,103 +108,126 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardIndexRoute = DashboardIndexRouteImport.update({
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/_authenticated/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/_authenticated/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedDashboardIndexRoute =
+  AuthenticatedDashboardIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminRoute,
-} as any)
-const DashboardWalletRoute = DashboardWalletRouteImport.update({
-  id: '/wallet',
-  path: '/wallet',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardTransactionsRoute = DashboardTransactionsRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardReferralsRoute = DashboardReferralsRouteImport.update({
-  id: '/referrals',
-  path: '/referrals',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardProfileRoute = DashboardProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardInvestmentsRoute = DashboardInvestmentsRouteImport.update({
-  id: '/investments',
-  path: '/investments',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const AdminWithdrawalsRoute = AdminWithdrawalsRouteImport.update({
-  id: '/withdrawals',
-  path: '/withdrawals',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminUsersRoute = AdminUsersRouteImport.update({
+const AuthenticatedDashboardWalletRoute =
+  AuthenticatedDashboardWalletRouteImport.update({
+    id: '/wallet',
+    path: '/wallet',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardTransactionsRoute =
+  AuthenticatedDashboardTransactionsRouteImport.update({
+    id: '/transactions',
+    path: '/transactions',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardSettingsRoute =
+  AuthenticatedDashboardSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardReferralsRoute =
+  AuthenticatedDashboardReferralsRouteImport.update({
+    id: '/referrals',
+    path: '/referrals',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardProfileRoute =
+  AuthenticatedDashboardProfileRouteImport.update({
+    id: '/profile',
+    path: '/profile',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardNotificationsRoute =
+  AuthenticatedDashboardNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardInvestmentsRoute =
+  AuthenticatedDashboardInvestmentsRouteImport.update({
+    id: '/investments',
+    path: '/investments',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedAdminWithdrawalsRoute =
+  AuthenticatedAdminWithdrawalsRouteImport.update({
+    id: '/withdrawals',
+    path: '/withdrawals',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
-const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminSettingsRoute = AdminSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminReportsRoute = AdminReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminPlansRoute = AdminPlansRouteImport.update({
+const AuthenticatedAdminTransactionsRoute =
+  AuthenticatedAdminTransactionsRouteImport.update({
+    id: '/transactions',
+    path: '/transactions',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminReportsRoute =
+  AuthenticatedAdminReportsRouteImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminPlansRoute = AuthenticatedAdminPlansRouteImport.update({
   id: '/plans',
   path: '/plans',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
-const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminDepositsRoute = AdminDepositsRouteImport.update({
-  id: '/deposits',
-  path: '/deposits',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => AdminRoute,
-} as any)
+const AuthenticatedAdminNotificationsRoute =
+  AuthenticatedAdminNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminDepositsRoute =
+  AuthenticatedAdminDepositsRouteImport.update({
+    id: '/deposits',
+    path: '/deposits',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminAnalyticsRoute =
+  AuthenticatedAdminAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/admin': typeof AdminRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/how-it-works': typeof HowItWorksRoute
@@ -225,24 +238,26 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/admin/analytics': typeof AdminAnalyticsRoute
-  '/admin/deposits': typeof AdminDepositsRoute
-  '/admin/notifications': typeof AdminNotificationsRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/reports': typeof AdminReportsRoute
-  '/admin/settings': typeof AdminSettingsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/admin/withdrawals': typeof AdminWithdrawalsRoute
-  '/dashboard/investments': typeof DashboardInvestmentsRoute
-  '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/profile': typeof DashboardProfileRoute
-  '/dashboard/referrals': typeof DashboardReferralsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/transactions': typeof DashboardTransactionsRoute
-  '/dashboard/wallet': typeof DashboardWalletRoute
-  '/admin/': typeof AdminIndexRoute
-  '/dashboard/': typeof DashboardIndexRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/admin/deposits': typeof AuthenticatedAdminDepositsRoute
+  '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
+  '/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/transactions': typeof AuthenticatedAdminTransactionsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/withdrawals': typeof AuthenticatedAdminWithdrawalsRoute
+  '/dashboard/investments': typeof AuthenticatedDashboardInvestmentsRoute
+  '/dashboard/notifications': typeof AuthenticatedDashboardNotificationsRoute
+  '/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/dashboard/referrals': typeof AuthenticatedDashboardReferralsRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
+  '/dashboard/transactions': typeof AuthenticatedDashboardTransactionsRoute
+  '/dashboard/wallet': typeof AuthenticatedDashboardWalletRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -258,32 +273,30 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/admin/analytics': typeof AdminAnalyticsRoute
-  '/admin/deposits': typeof AdminDepositsRoute
-  '/admin/notifications': typeof AdminNotificationsRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/reports': typeof AdminReportsRoute
-  '/admin/settings': typeof AdminSettingsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/admin/withdrawals': typeof AdminWithdrawalsRoute
-  '/dashboard/investments': typeof DashboardInvestmentsRoute
-  '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/profile': typeof DashboardProfileRoute
-  '/dashboard/referrals': typeof DashboardReferralsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/transactions': typeof DashboardTransactionsRoute
-  '/dashboard/wallet': typeof DashboardWalletRoute
-  '/admin': typeof AdminIndexRoute
-  '/dashboard': typeof DashboardIndexRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/admin/deposits': typeof AuthenticatedAdminDepositsRoute
+  '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
+  '/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/transactions': typeof AuthenticatedAdminTransactionsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/withdrawals': typeof AuthenticatedAdminWithdrawalsRoute
+  '/dashboard/investments': typeof AuthenticatedDashboardInvestmentsRoute
+  '/dashboard/notifications': typeof AuthenticatedDashboardNotificationsRoute
+  '/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/dashboard/referrals': typeof AuthenticatedDashboardReferralsRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
+  '/dashboard/transactions': typeof AuthenticatedDashboardTransactionsRoute
+  '/dashboard/wallet': typeof AuthenticatedDashboardWalletRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
+  '/dashboard': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/admin': typeof AdminRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/how-it-works': typeof HowItWorksRoute
@@ -294,33 +307,33 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/admin/analytics': typeof AdminAnalyticsRoute
-  '/admin/deposits': typeof AdminDepositsRoute
-  '/admin/notifications': typeof AdminNotificationsRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/reports': typeof AdminReportsRoute
-  '/admin/settings': typeof AdminSettingsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/admin/withdrawals': typeof AdminWithdrawalsRoute
-  '/dashboard/investments': typeof DashboardInvestmentsRoute
-  '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/profile': typeof DashboardProfileRoute
-  '/dashboard/referrals': typeof DashboardReferralsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/transactions': typeof DashboardTransactionsRoute
-  '/dashboard/wallet': typeof DashboardWalletRoute
-  '/admin/': typeof AdminIndexRoute
-  '/dashboard/': typeof DashboardIndexRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/_authenticated/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/_authenticated/admin/deposits': typeof AuthenticatedAdminDepositsRoute
+  '/_authenticated/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
+  '/_authenticated/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/_authenticated/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/transactions': typeof AuthenticatedAdminTransactionsRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/admin/withdrawals': typeof AuthenticatedAdminWithdrawalsRoute
+  '/_authenticated/dashboard/investments': typeof AuthenticatedDashboardInvestmentsRoute
+  '/_authenticated/dashboard/notifications': typeof AuthenticatedDashboardNotificationsRoute
+  '/_authenticated/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/_authenticated/dashboard/referrals': typeof AuthenticatedDashboardReferralsRoute
+  '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
+  '/_authenticated/dashboard/transactions': typeof AuthenticatedDashboardTransactionsRoute
+  '/_authenticated/dashboard/wallet': typeof AuthenticatedDashboardWalletRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/about'
-    | '/admin'
     | '/contact'
-    | '/dashboard'
     | '/faq'
     | '/forgot-password'
     | '/how-it-works'
@@ -331,6 +344,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/verify-email'
+    | '/admin'
+    | '/dashboard'
     | '/admin/analytics'
     | '/admin/deposits'
     | '/admin/notifications'
@@ -386,9 +401,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
-    | '/admin'
     | '/contact'
-    | '/dashboard'
     | '/faq'
     | '/forgot-password'
     | '/how-it-works'
@@ -399,32 +412,32 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/verify-email'
-    | '/admin/analytics'
-    | '/admin/deposits'
-    | '/admin/notifications'
-    | '/admin/plans'
-    | '/admin/reports'
-    | '/admin/settings'
-    | '/admin/transactions'
-    | '/admin/users'
-    | '/admin/withdrawals'
-    | '/dashboard/investments'
-    | '/dashboard/notifications'
-    | '/dashboard/profile'
-    | '/dashboard/referrals'
-    | '/dashboard/settings'
-    | '/dashboard/transactions'
-    | '/dashboard/wallet'
-    | '/admin/'
-    | '/dashboard/'
+    | '/_authenticated/admin'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/admin/analytics'
+    | '/_authenticated/admin/deposits'
+    | '/_authenticated/admin/notifications'
+    | '/_authenticated/admin/plans'
+    | '/_authenticated/admin/reports'
+    | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/transactions'
+    | '/_authenticated/admin/users'
+    | '/_authenticated/admin/withdrawals'
+    | '/_authenticated/dashboard/investments'
+    | '/_authenticated/dashboard/notifications'
+    | '/_authenticated/dashboard/profile'
+    | '/_authenticated/dashboard/referrals'
+    | '/_authenticated/dashboard/settings'
+    | '/_authenticated/dashboard/transactions'
+    | '/_authenticated/dashboard/wallet'
+    | '/_authenticated/admin/'
+    | '/_authenticated/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
-  AdminRoute: typeof AdminRouteWithChildren
   ContactRoute: typeof ContactRoute
-  DashboardRoute: typeof DashboardRouteWithChildren
   FaqRoute: typeof FaqRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HowItWorksRoute: typeof HowItWorksRoute
@@ -435,6 +448,8 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -509,25 +524,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FaqRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/contact': {
       id: '/contact'
       path: '/contact'
       fullPath: '/contact'
       preLoaderRoute: typeof ContactRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -544,195 +545,213 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/': {
-      id: '/dashboard/'
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/dashboard/': {
+      id: '/_authenticated/dashboard/'
       path: '/'
       fullPath: '/dashboard/'
-      preLoaderRoute: typeof DashboardIndexRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/admin/': {
-      id: '/admin/'
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
       path: '/'
       fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/dashboard/wallet': {
-      id: '/dashboard/wallet'
+    '/_authenticated/dashboard/wallet': {
+      id: '/_authenticated/dashboard/wallet'
       path: '/wallet'
       fullPath: '/dashboard/wallet'
-      preLoaderRoute: typeof DashboardWalletRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardWalletRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/transactions': {
-      id: '/dashboard/transactions'
+    '/_authenticated/dashboard/transactions': {
+      id: '/_authenticated/dashboard/transactions'
       path: '/transactions'
       fullPath: '/dashboard/transactions'
-      preLoaderRoute: typeof DashboardTransactionsRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardTransactionsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/settings': {
-      id: '/dashboard/settings'
+    '/_authenticated/dashboard/settings': {
+      id: '/_authenticated/dashboard/settings'
       path: '/settings'
       fullPath: '/dashboard/settings'
-      preLoaderRoute: typeof DashboardSettingsRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardSettingsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/referrals': {
-      id: '/dashboard/referrals'
+    '/_authenticated/dashboard/referrals': {
+      id: '/_authenticated/dashboard/referrals'
       path: '/referrals'
       fullPath: '/dashboard/referrals'
-      preLoaderRoute: typeof DashboardReferralsRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardReferralsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/profile': {
-      id: '/dashboard/profile'
+    '/_authenticated/dashboard/profile': {
+      id: '/_authenticated/dashboard/profile'
       path: '/profile'
       fullPath: '/dashboard/profile'
-      preLoaderRoute: typeof DashboardProfileRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardProfileRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/notifications': {
-      id: '/dashboard/notifications'
+    '/_authenticated/dashboard/notifications': {
+      id: '/_authenticated/dashboard/notifications'
       path: '/notifications'
       fullPath: '/dashboard/notifications'
-      preLoaderRoute: typeof DashboardNotificationsRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardNotificationsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/dashboard/investments': {
-      id: '/dashboard/investments'
+    '/_authenticated/dashboard/investments': {
+      id: '/_authenticated/dashboard/investments'
       path: '/investments'
       fullPath: '/dashboard/investments'
-      preLoaderRoute: typeof DashboardInvestmentsRouteImport
-      parentRoute: typeof DashboardRoute
+      preLoaderRoute: typeof AuthenticatedDashboardInvestmentsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
     }
-    '/admin/withdrawals': {
-      id: '/admin/withdrawals'
+    '/_authenticated/admin/withdrawals': {
+      id: '/_authenticated/admin/withdrawals'
       path: '/withdrawals'
       fullPath: '/admin/withdrawals'
-      preLoaderRoute: typeof AdminWithdrawalsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminWithdrawalsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/users': {
-      id: '/admin/users'
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
       path: '/users'
       fullPath: '/admin/users'
-      preLoaderRoute: typeof AdminUsersRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/transactions': {
-      id: '/admin/transactions'
+    '/_authenticated/admin/transactions': {
+      id: '/_authenticated/admin/transactions'
       path: '/transactions'
       fullPath: '/admin/transactions'
-      preLoaderRoute: typeof AdminTransactionsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminTransactionsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/settings': {
-      id: '/admin/settings'
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
       path: '/settings'
       fullPath: '/admin/settings'
-      preLoaderRoute: typeof AdminSettingsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/reports': {
-      id: '/admin/reports'
+    '/_authenticated/admin/reports': {
+      id: '/_authenticated/admin/reports'
       path: '/reports'
       fullPath: '/admin/reports'
-      preLoaderRoute: typeof AdminReportsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminReportsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/plans': {
-      id: '/admin/plans'
+    '/_authenticated/admin/plans': {
+      id: '/_authenticated/admin/plans'
       path: '/plans'
       fullPath: '/admin/plans'
-      preLoaderRoute: typeof AdminPlansRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminPlansRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/notifications': {
-      id: '/admin/notifications'
+    '/_authenticated/admin/notifications': {
+      id: '/_authenticated/admin/notifications'
       path: '/notifications'
       fullPath: '/admin/notifications'
-      preLoaderRoute: typeof AdminNotificationsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminNotificationsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/deposits': {
-      id: '/admin/deposits'
+    '/_authenticated/admin/deposits': {
+      id: '/_authenticated/admin/deposits'
       path: '/deposits'
       fullPath: '/admin/deposits'
-      preLoaderRoute: typeof AdminDepositsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminDepositsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/admin/analytics': {
-      id: '/admin/analytics'
+    '/_authenticated/admin/analytics': {
+      id: '/_authenticated/admin/analytics'
       path: '/analytics'
       fullPath: '/admin/analytics'
-      preLoaderRoute: typeof AdminAnalyticsRouteImport
-      parentRoute: typeof AdminRoute
+      preLoaderRoute: typeof AuthenticatedAdminAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
   }
 }
 
-interface AdminRouteChildren {
-  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
-  AdminDepositsRoute: typeof AdminDepositsRoute
-  AdminNotificationsRoute: typeof AdminNotificationsRoute
-  AdminPlansRoute: typeof AdminPlansRoute
-  AdminReportsRoute: typeof AdminReportsRoute
-  AdminSettingsRoute: typeof AdminSettingsRoute
-  AdminTransactionsRoute: typeof AdminTransactionsRoute
-  AdminUsersRoute: typeof AdminUsersRoute
-  AdminWithdrawalsRoute: typeof AdminWithdrawalsRoute
-  AdminIndexRoute: typeof AdminIndexRoute
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminAnalyticsRoute: typeof AuthenticatedAdminAnalyticsRoute
+  AuthenticatedAdminDepositsRoute: typeof AuthenticatedAdminDepositsRoute
+  AuthenticatedAdminNotificationsRoute: typeof AuthenticatedAdminNotificationsRoute
+  AuthenticatedAdminPlansRoute: typeof AuthenticatedAdminPlansRoute
+  AuthenticatedAdminReportsRoute: typeof AuthenticatedAdminReportsRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminTransactionsRoute: typeof AuthenticatedAdminTransactionsRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+  AuthenticatedAdminWithdrawalsRoute: typeof AuthenticatedAdminWithdrawalsRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
-const AdminRouteChildren: AdminRouteChildren = {
-  AdminAnalyticsRoute: AdminAnalyticsRoute,
-  AdminDepositsRoute: AdminDepositsRoute,
-  AdminNotificationsRoute: AdminNotificationsRoute,
-  AdminPlansRoute: AdminPlansRoute,
-  AdminReportsRoute: AdminReportsRoute,
-  AdminSettingsRoute: AdminSettingsRoute,
-  AdminTransactionsRoute: AdminTransactionsRoute,
-  AdminUsersRoute: AdminUsersRoute,
-  AdminWithdrawalsRoute: AdminWithdrawalsRoute,
-  AdminIndexRoute: AdminIndexRoute,
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminAnalyticsRoute: AuthenticatedAdminAnalyticsRoute,
+  AuthenticatedAdminDepositsRoute: AuthenticatedAdminDepositsRoute,
+  AuthenticatedAdminNotificationsRoute: AuthenticatedAdminNotificationsRoute,
+  AuthenticatedAdminPlansRoute: AuthenticatedAdminPlansRoute,
+  AuthenticatedAdminReportsRoute: AuthenticatedAdminReportsRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+  AuthenticatedAdminTransactionsRoute: AuthenticatedAdminTransactionsRoute,
+  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  AuthenticatedAdminWithdrawalsRoute: AuthenticatedAdminWithdrawalsRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
 
-const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
 
-interface DashboardRouteChildren {
-  DashboardInvestmentsRoute: typeof DashboardInvestmentsRoute
-  DashboardNotificationsRoute: typeof DashboardNotificationsRoute
-  DashboardProfileRoute: typeof DashboardProfileRoute
-  DashboardReferralsRoute: typeof DashboardReferralsRoute
-  DashboardSettingsRoute: typeof DashboardSettingsRoute
-  DashboardTransactionsRoute: typeof DashboardTransactionsRoute
-  DashboardWalletRoute: typeof DashboardWalletRoute
-  DashboardIndexRoute: typeof DashboardIndexRoute
+interface AuthenticatedDashboardRouteChildren {
+  AuthenticatedDashboardInvestmentsRoute: typeof AuthenticatedDashboardInvestmentsRoute
+  AuthenticatedDashboardNotificationsRoute: typeof AuthenticatedDashboardNotificationsRoute
+  AuthenticatedDashboardProfileRoute: typeof AuthenticatedDashboardProfileRoute
+  AuthenticatedDashboardReferralsRoute: typeof AuthenticatedDashboardReferralsRoute
+  AuthenticatedDashboardSettingsRoute: typeof AuthenticatedDashboardSettingsRoute
+  AuthenticatedDashboardTransactionsRoute: typeof AuthenticatedDashboardTransactionsRoute
+  AuthenticatedDashboardWalletRoute: typeof AuthenticatedDashboardWalletRoute
+  AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
 }
 
-const DashboardRouteChildren: DashboardRouteChildren = {
-  DashboardInvestmentsRoute: DashboardInvestmentsRoute,
-  DashboardNotificationsRoute: DashboardNotificationsRoute,
-  DashboardProfileRoute: DashboardProfileRoute,
-  DashboardReferralsRoute: DashboardReferralsRoute,
-  DashboardSettingsRoute: DashboardSettingsRoute,
-  DashboardTransactionsRoute: DashboardTransactionsRoute,
-  DashboardWalletRoute: DashboardWalletRoute,
-  DashboardIndexRoute: DashboardIndexRoute,
-}
+const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
+  {
+    AuthenticatedDashboardInvestmentsRoute:
+      AuthenticatedDashboardInvestmentsRoute,
+    AuthenticatedDashboardNotificationsRoute:
+      AuthenticatedDashboardNotificationsRoute,
+    AuthenticatedDashboardProfileRoute: AuthenticatedDashboardProfileRoute,
+    AuthenticatedDashboardReferralsRoute: AuthenticatedDashboardReferralsRoute,
+    AuthenticatedDashboardSettingsRoute: AuthenticatedDashboardSettingsRoute,
+    AuthenticatedDashboardTransactionsRoute:
+      AuthenticatedDashboardTransactionsRoute,
+    AuthenticatedDashboardWalletRoute: AuthenticatedDashboardWalletRoute,
+    AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  }
 
-const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
-  DashboardRouteChildren,
-)
+const AuthenticatedDashboardRouteWithChildren =
+  AuthenticatedDashboardRoute._addFileChildren(
+    AuthenticatedDashboardRouteChildren,
+  )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
-  AdminRoute: AdminRouteWithChildren,
   ContactRoute: ContactRoute,
-  DashboardRoute: DashboardRouteWithChildren,
   FaqRoute: FaqRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HowItWorksRoute: HowItWorksRoute,
@@ -743,6 +762,8 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

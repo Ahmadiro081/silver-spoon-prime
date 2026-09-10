@@ -7,7 +7,7 @@ import { formatNaira } from "@/lib/format";
 import { Search, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 
-export const Route = createFileRoute("/admin/users")({
+export const Route = createFileRoute("/_authenticated/admin/users")({
   head: () => ({ meta: [{ title: "Users — Admin" }] }),
   component: UsersPage,
 });
