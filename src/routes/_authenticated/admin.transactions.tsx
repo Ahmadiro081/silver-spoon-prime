@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/layouts/DashboardLayout";
 import { transactions } from "@/lib/mock-data";
 import { formatNaira } from "@/lib/format";
 
-export const Route = createFileRoute("/admin/transactions")({
+export const Route = createFileRoute("/_authenticated/admin/transactions")({
   head: () => ({ meta: [{ title: "Transactions — Admin" }] }),
   component: () => (
     <AdminLayout title="Transactions">

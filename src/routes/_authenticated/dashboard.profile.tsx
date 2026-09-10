@@ -8,7 +8,7 @@ import { Camera } from "lucide-react";
 import { toast } from "sonner";
 import type { FormEvent } from "react";
 
-export const Route = createFileRoute("/dashboard/profile")({
+export const Route = createFileRoute("/_authenticated/dashboard/profile")({
   head: () => ({ meta: [{ title: "Profile — SILVER SPOON" }] }),
   component: Profile,
 });

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { FormEvent } from "react";
 
-export const Route = createFileRoute("/admin/settings")({
+export const Route = createFileRoute("/_authenticated/admin/settings")({
   head: () => ({ meta: [{ title: "Settings — Admin" }] }),
   component: () => {
     const save = (e: FormEvent) => { e.preventDefault(); toast.success("Settings saved"); };

@@ -8,7 +8,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from "recharts";
 
-export const Route = createFileRoute("/admin/")({
+export const Route = createFileRoute("/_authenticated/admin/")({
   head: () => ({ meta: [{ title: "Admin — SILVER SPOON" }] }),
   component: AdminOverview,
 });

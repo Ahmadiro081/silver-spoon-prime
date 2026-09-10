@@ -7,7 +7,7 @@ import { formatNaira } from "@/lib/format";
 import { Copy, Share2, Users, Gift } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/dashboard/referrals")({
+export const Route = createFileRoute("/_authenticated/dashboard/referrals")({
   head: () => ({ meta: [{ title: "Referrals — SILVER SPOON" }] }),
   component: Referrals,
 });

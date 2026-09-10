@@ -5,7 +5,7 @@ import { plans } from "@/lib/mock-data";
 import { formatNaira } from "@/lib/format";
 import { Pencil, Plus } from "lucide-react";
 
-export const Route = createFileRoute("/admin/plans")({
+export const Route = createFileRoute("/_authenticated/admin/plans")({
   head: () => ({ meta: [{ title: "Plans — Admin" }] }),
   component: PlansAdmin,
 });

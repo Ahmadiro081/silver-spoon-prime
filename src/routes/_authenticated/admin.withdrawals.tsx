@@ -5,7 +5,7 @@ import { transactions } from "@/lib/mock-data";
 import { formatNaira } from "@/lib/format";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/admin/withdrawals")({
+export const Route = createFileRoute("/_authenticated/admin/withdrawals")({
   head: () => ({ meta: [{ title: "Withdrawals — Admin" }] }),
   component: () => {
     const rows = transactions.filter((t) => t.type === "Withdrawal");

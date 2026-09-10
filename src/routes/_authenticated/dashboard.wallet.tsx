@@ -12,7 +12,7 @@ import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { useState, type FormEvent } from "react";
 
-export const Route = createFileRoute("/dashboard/wallet")({
+export const Route = createFileRoute("/_authenticated/dashboard/wallet")({
   head: () => ({ meta: [{ title: "Wallet — SILVER SPOON" }] }),
   component: WalletPage,
 });

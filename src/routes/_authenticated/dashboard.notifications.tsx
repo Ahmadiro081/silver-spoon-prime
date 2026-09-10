@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowDownToLine, ArrowUpFromLine, TrendingUp, Users, Shield, Check } from "lucide-react";
 import { useState } from "react";
 
-export const Route = createFileRoute("/dashboard/notifications")({
+export const Route = createFileRoute("/_authenticated/dashboard/notifications")({
   head: () => ({ meta: [{ title: "Notifications — SILVER SPOON" }] }),
   component: NotificationsPage,
 });

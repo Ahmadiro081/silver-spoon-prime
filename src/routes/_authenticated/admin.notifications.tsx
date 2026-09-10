@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { FormEvent } from "react";
 
-export const Route = createFileRoute("/admin/notifications")({
+export const Route = createFileRoute("/_authenticated/admin/notifications")({
   head: () => ({ meta: [{ title: "Notifications — Admin" }] }),
   component: () => {
     const send = (e: FormEvent) => {

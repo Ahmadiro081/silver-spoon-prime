@@ -7,7 +7,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
-export const Route = createFileRoute("/admin/analytics")({
+export const Route = createFileRoute("/_authenticated/admin/analytics")({
   head: () => ({ meta: [{ title: "Analytics — Admin" }] }),
   component: Analytics,
 });
