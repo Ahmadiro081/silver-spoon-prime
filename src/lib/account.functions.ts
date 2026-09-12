@@ -117,7 +117,7 @@ export const createDeposit = createServerFn({ method: "POST" })
       user_id: context.userId,
       type: "Deposit",
       amount: data.amount,
-      status: "Completed",
+      status: "Pending",
       method: data.method,
     });
     if (error) throw new Error(error.message);

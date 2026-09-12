@@ -172,6 +172,42 @@ export const reviewTransaction = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+export const completeInvestment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
+
+    const { data: inv, error: readError } = await supabase
+      .from("investments")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!inv) return { ok: false as const, error: "Investment not found." };
+    if (inv.status !== "Active") return { ok: false as const, error: "Investment is not active." };
+
+    const { error: updateError } = await supabase
+      .from("investments")
+      .update({ status: "Matured" })
+      .eq("id", data.id);
+    if (updateError) throw new Error(updateError.message);
+
+    const payout = Math.round((num(inv.amount) * num(inv.roi_percent)) / 100);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: txnError } = await supabaseAdmin.from("transactions").insert({
+      user_id: inv.user_id,
+      type: "Profit",
+      amount: payout,
+      status: "Completed",
+      method: inv.plan_name,
+      note: "Investment matured",
+    });
+    if (txnError) throw new Error(txnError.message);
+    return { ok: true as const, payout };
+  });
+
 export const setUserStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { userId: string; status: string }) =>
