@@ -26,6 +26,7 @@ const adminNav: Item[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/plans", label: "Plans", icon: CircleDollarSign },
+  { to: "/admin/investments", label: "Investments", icon: TrendingUp },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt },
   { to: "/admin/deposits", label: "Deposits", icon: ArrowDownToLine },
   { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine },

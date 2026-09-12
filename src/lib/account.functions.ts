@@ -71,8 +71,9 @@ export function computeWallet(txns: DbTransaction[], investments: DbInvestment[]
   const locked = investments
     .filter((i) => i.status === "Active")
     .reduce((sum, i) => sum + num(i.amount), 0);
-  const available =
-    deposits + profit + referral - withdrawals - pendingWithdrawals - invested;
+  void invested;
+  // Only active investments hold money; matured/cancelled principal returns to available.
+  const available = deposits + profit + referral - withdrawals - pendingWithdrawals - locked;
   return {
     balance: available + locked,
     available,
@@ -117,7 +118,7 @@ export const createDeposit = createServerFn({ method: "POST" })
       user_id: context.userId,
       type: "Deposit",
       amount: data.amount,
-      status: "Completed",
+      status: "Pending",
       method: data.method,
     });
     if (error) throw new Error(error.message);
