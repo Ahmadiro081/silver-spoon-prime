@@ -142,7 +142,7 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
             </SelectContent>
           </Select>
         </div>
-        <Button type="submit" className="w-full rounded-full">{isDeposit ? "Confirm deposit" : "Request withdrawal"}</Button>
+        <Button type="submit" disabled={busy} className="w-full rounded-full">{busy ? "Submitting…" : isDeposit ? "Confirm deposit" : "Request withdrawal"}</Button>
       </div>
     </form>
   );
@@ -159,7 +159,7 @@ function HistoryTable({ filter, txns }: { filter: (t: Transaction) => boolean; t
         <tbody>
           {rows.map((t) => (
             <tr key={t.id} className="border-t border-border">
-              <td className="px-4 py-3">{t.date}</td>
+              <td className="px-4 py-3">{formatDate(t.date)}</td>
               <td className="px-4 py-3">{t.type}</td>
               <td className="px-4 py-3 text-muted-foreground">{t.method}</td>
               <td className="px-4 py-3 text-right font-medium">{formatNaira(t.amount)}</td>
