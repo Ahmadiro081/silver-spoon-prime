@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatNaira } from "@/lib/format";
 import { useWallet } from "@/lib/wallet-store";
-import type { Transaction } from "@/lib/mock-data";
+import type { Transaction } from "@/lib/wallet-store";
+import { formatDate } from "@/hooks/useAdminData";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { useState, type FormEvent } from "react";
@@ -80,24 +81,29 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState(isDeposit ? "transfer" : "gtbank");
 
-  const onSubmit = (e: FormEvent) => {
+  const [busy, setBusy] = useState(false);
+
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const value = Math.floor(Number(amount));
     if (!Number.isFinite(value) || value < 1000) {
       toast.error("Enter a valid amount", { description: "Minimum amount is ₦1,000." });
       return;
     }
-    if (isDeposit) {
-      wallet.deposit(value, method);
-      toast.success("Deposit successful", { description: `${formatNaira(value)} added to your wallet.` });
-    } else {
-      const res = wallet.withdraw(value, method);
-      if ("error" in res) {
-        toast.error("Withdrawal failed", { description: res.error });
-        return;
-      }
-      toast.success("Withdrawal requested", { description: `${formatNaira(value)} is on its way to your bank.` });
+    setBusy(true);
+    const res = isDeposit ? await wallet.deposit(value, method) : await wallet.withdraw(value, method);
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(isDeposit ? "Deposit failed" : "Withdrawal failed", {
+        description: res.error ?? "Please try again.",
+      });
+      return;
     }
+    toast.success(isDeposit ? "Deposit submitted" : "Withdrawal requested", {
+      description: isDeposit
+        ? `${formatNaira(value)} is awaiting approval.`
+        : `${formatNaira(value)} is awaiting payout approval.`,
+    });
     setAmount("");
   };
   return (
