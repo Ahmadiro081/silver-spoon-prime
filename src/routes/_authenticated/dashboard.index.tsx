@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { growthChart, plans } from "@/lib/mock-data";
 import { useWallet } from "@/lib/wallet-store";
 import { formatNaira } from "@/lib/format";
+import { formatDate } from "@/hooks/useAdminData";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -114,7 +115,7 @@ function DashboardHome() {
               <div key={t.id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm font-medium">{t.type}</p>
-                  <p className="text-xs text-muted-foreground">{t.date} · {t.id}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(t.date)}{t.method ? ` · ${t.method}` : ""}</p>
                 </div>
                 <div className="text-right">
                   <p className={`text-sm font-semibold ${t.type === "Withdrawal" ? "text-destructive" : t.type === "Profit" || t.type === "Referral" ? "text-success" : ""}`}>

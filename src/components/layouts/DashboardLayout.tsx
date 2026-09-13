@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Wallet, LineChart, Users, Bell, Receipt, User, Settings, LogOut, Menu, X,
-  ShieldCheck, BarChart3, FileText, CircleDollarSign, ArrowDownToLine, ArrowUpFromLine,
+  ShieldCheck, BarChart3, FileText, CircleDollarSign, ArrowDownToLine, ArrowUpFromLine, TrendingUp,
 } from "lucide-react";
 import { useState, type ReactNode, type ComponentType } from "react";
 import { Logo } from "@/components/brand/Logo";
