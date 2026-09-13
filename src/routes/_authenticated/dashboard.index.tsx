@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { growthChart, plans } from "@/lib/mock-data";
 import { useWallet } from "@/lib/wallet-store";
 import { formatNaira } from "@/lib/format";
+import { formatDate } from "@/hooks/useAdminData";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
