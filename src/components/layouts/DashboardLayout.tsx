@@ -85,13 +85,7 @@ function SidebarInner({
         })}
       </nav>
       <div className="border-t border-border p-3">
-        <Link
-          to="/login"
-          onClick={onNavigate}
-          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" /> Sign out
-        </Link>
+        <LogoutButton variant="sidebar" />
       </div>
     </div>
   );
