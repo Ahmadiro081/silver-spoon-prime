@@ -23,7 +23,7 @@ export function LogoutButton({ variant = "button", className, onClick }: LogoutB
       await queryClient.cancelQueries();
       queryClient.clear();
       await supabase.auth.signOut();
-      navigate({ to: "/auth", replace: true });
+      navigate({ to: "/login", replace: true });
     } finally {
       setLoading(false);
     }
