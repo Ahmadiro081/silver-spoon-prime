@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, Wallet, LineChart, Users, Bell, Receipt, User, Settings, LogOut, Menu, X,
+  LayoutDashboard, Wallet, LineChart, Users, Bell, Receipt, User, Settings, Menu, X,
   ShieldCheck, BarChart3, FileText, CircleDollarSign, ArrowDownToLine, ArrowUpFromLine, TrendingUp,
 } from "lucide-react";
 import { useState, type ReactNode, type ComponentType } from "react";
@@ -8,6 +8,17 @@ import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { LogoutButton } from "@/components/auth/LogoutButton";
+import { useSession } from "@/hooks/useSession";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Item = { to: string; label: string; icon: ComponentType<{ className?: string }> };
 
