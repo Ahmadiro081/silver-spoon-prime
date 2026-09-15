@@ -57,6 +57,7 @@ export type Database = {
         Row: {
           account_name: string | null
           account_number: string | null
+          bank_code: string | null
           bank_name: string | null
           created_at: string
           email: string
@@ -70,6 +71,7 @@ export type Database = {
         Insert: {
           account_name?: string | null
           account_number?: string | null
+          bank_code?: string | null
           bank_name?: string | null
           created_at?: string
           email: string
@@ -83,6 +85,7 @@ export type Database = {
         Update: {
           account_name?: string | null
           account_number?: string | null
+          bank_code?: string | null
           bank_name?: string | null
           created_at?: string
           email?: string
@@ -102,6 +105,8 @@ export type Database = {
           id: string
           method: string | null
           note: string | null
+          provider: string | null
+          provider_ref: string | null
           status: string
           type: string
           updated_at: string
@@ -113,6 +118,8 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          provider?: string | null
+          provider_ref?: string | null
           status?: string
           type: string
           updated_at?: string
@@ -124,6 +131,8 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          provider?: string | null
+          provider_ref?: string | null
           status?: string
           type?: string
           updated_at?: string
