@@ -165,9 +165,7 @@ function Topbar({
           <Link to="/dashboard/notifications" className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
             <Bell className="h-4 w-4" />
           </Link>
-          <Avatar className="h-8 w-8 border border-border">
-            <AvatarFallback className="bg-gradient-ink text-xs text-primary-foreground">AO</AvatarFallback>
-          </Avatar>
+          <UserMenu />
         </div>
       </div>
     </header>
