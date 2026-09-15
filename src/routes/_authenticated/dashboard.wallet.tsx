@@ -1,17 +1,18 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatNaira } from "@/lib/format";
 import { useWallet } from "@/lib/wallet-store";
 import type { Transaction } from "@/lib/wallet-store";
 import { formatDate } from "@/hooks/useAdminData";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { startDeposit, confirmDeposit } from "@/lib/payments.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard/wallet")({
   head: () => ({ meta: [{ title: "Wallet — SILVER SPOON" }] }),
@@ -20,6 +21,34 @@ export const Route = createFileRoute("/_authenticated/dashboard/wallet")({
 
 function WalletPage() {
   const wallet = useWallet();
+  const confirm = useServerFn(confirmDeposit);
+  const handled = useRef(false);
+
+  // Paystack sends the customer back here with ?reference=...
+  useEffect(() => {
+    if (handled.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") ?? params.get("trxref");
+    if (!reference) return;
+    handled.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    void (async () => {
+      try {
+        const res = await confirm({ data: { reference } });
+        if (res.ok) {
+          await wallet.refresh();
+          toast.success("Payment received", { description: "Your wallet has been credited." });
+        } else {
+          toast.error("Payment not completed", { description: res.error });
+        }
+      } catch {
+        toast.error("Could not confirm the payment", { description: "Please refresh in a moment." });
+      }
+    })();
+  }, [confirm, wallet]);
+
+  const bank = wallet.profile;
+
   return (
     <DashboardLayout title="Wallet">
       <div className="grid gap-4 lg:grid-cols-3">
@@ -34,9 +63,22 @@ function WalletPage() {
         </div>
         <div className="card-premium p-6">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Linked bank</p>
-          <p className="font-display mt-2 text-xl">GTBank</p>
-          <p className="text-sm text-muted-foreground">0123 45**89 · Adaeze O. Okafor</p>
-          <Button variant="outline" className="mt-6 w-full rounded-full">Manage bank details</Button>
+          {bank?.account_number ? (
+            <>
+              <p className="font-display mt-2 text-xl">{bank.bank_name ?? "Bank account"}</p>
+              <p className="text-sm text-muted-foreground">
+                {bank.account_number} · {bank.account_name ?? bank.full_name}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-display mt-2 text-xl">Not set up</p>
+              <p className="text-sm text-muted-foreground">Add your bank account to receive payouts.</p>
+            </>
+          )}
+          <Button asChild variant="outline" className="mt-6 w-full rounded-full">
+            <Link to="/dashboard/profile">{bank?.account_number ? "Manage bank details" : "Add bank details"}</Link>
+          </Button>
         </div>
       </div>
 
@@ -78,10 +120,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 function FormCard({ type }: { type: "deposit" | "withdraw" }) {
   const isDeposit = type === "deposit";
   const wallet = useWallet();
+  const pay = useServerFn(startDeposit);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState(isDeposit ? "transfer" : "gtbank");
-
   const [busy, setBusy] = useState(false);
+
+  const bank = wallet.profile;
+  const destination = bank?.account_number
+    ? `${bank.bank_name ?? "Bank"} ${bank.account_number}`
+    : "";
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -91,21 +137,43 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
       return;
     }
     setBusy(true);
-    const res = isDeposit ? await wallet.deposit(value, method) : await wallet.withdraw(value, method);
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(isDeposit ? "Deposit failed" : "Withdrawal failed", {
-        description: res.error ?? "Please try again.",
-      });
+
+    if (isDeposit) {
+      try {
+        const res = await pay({ data: { amount: value, origin: window.location.origin } });
+        if (!res.ok || !res.url) {
+          toast.error("Could not start the payment", { description: res.error ?? "Please try again." });
+          setBusy(false);
+          return;
+        }
+        window.location.href = res.url;
+        return;
+      } catch (err) {
+        toast.error("Could not start the payment", {
+          description: err instanceof Error ? err.message : "Please try again.",
+        });
+        setBusy(false);
+        return;
+      }
+    }
+
+    if (!destination) {
+      toast.error("Add your bank account first", { description: "We need it to send your money." });
+      setBusy(false);
       return;
     }
-    toast.success(isDeposit ? "Deposit submitted" : "Withdrawal requested", {
-      description: isDeposit
-        ? `${formatNaira(value)} is awaiting approval.`
-        : `${formatNaira(value)} is awaiting payout approval.`,
+    const res = await wallet.withdraw(value, destination);
+    setBusy(false);
+    if (!res.ok) {
+      toast.error("Withdrawal failed", { description: res.error ?? "Please try again." });
+      return;
+    }
+    toast.success("Withdrawal requested", {
+      description: `${formatNaira(value)} is awaiting payout approval.`,
     });
     setAmount("");
   };
+
   return (
     <form onSubmit={onSubmit} className="card-premium p-6">
       <div className="flex items-center gap-3">
@@ -114,7 +182,9 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
         </span>
         <div>
           <h3 className="font-display text-lg">{isDeposit ? "Deposit" : "Withdraw"}</h3>
-          <p className="text-xs text-muted-foreground">{isDeposit ? "Fund your wallet" : "Send to your bank"}</p>
+          <p className="text-xs text-muted-foreground">
+            {isDeposit ? "Pay securely by card, transfer or USSD" : "Send to your saved bank account"}
+          </p>
         </div>
       </div>
       <div className="mt-6 space-y-4">
@@ -123,26 +193,14 @@ function FormCard({ type }: { type: "deposit" | "withdraw" }) {
           <Input type="number" min={1000} step={1000} required placeholder="₦ 100,000" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>{isDeposit ? "Method" : "Destination"}</Label>
-          <Select value={method} onValueChange={setMethod}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {isDeposit ? (
-                <>
-                  <SelectItem value="transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="card">Debit Card</SelectItem>
-                  <SelectItem value="ussd">USSD</SelectItem>
-                </>
-              ) : (
-                <>
-                  <SelectItem value="gtbank">GTBank ****4521</SelectItem>
-                  <SelectItem value="access">Access ****9012</SelectItem>
-                </>
-              )}
-            </SelectContent>
-          </Select>
+          <Label>{isDeposit ? "Payment" : "Destination"}</Label>
+          <div className="rounded-xl border border-border bg-secondary/60 px-3 py-2.5 text-sm text-muted-foreground">
+            {isDeposit ? "Card · Bank transfer · USSD" : destination || "No bank account saved yet"}
+          </div>
         </div>
-        <Button type="submit" disabled={busy} className="w-full rounded-full">{busy ? "Submitting…" : isDeposit ? "Confirm deposit" : "Request withdrawal"}</Button>
+        <Button type="submit" disabled={busy} className="w-full rounded-full">
+          {busy ? "Please wait…" : isDeposit ? "Continue to payment" : "Request withdrawal"}
+        </Button>
       </div>
     </form>
   );
