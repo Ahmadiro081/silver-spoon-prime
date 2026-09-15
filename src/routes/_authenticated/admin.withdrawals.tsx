@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/admin/withdrawals")({
 function WithdrawalsPage() {
   const { data, isPending, error, refresh } = useAdminOverview();
   const review = useServerFn(reviewTransaction);
+  const payout = useServerFn(payoutWithdrawal);
   const [busy, setBusy] = useState<string | null>(null);
   const rows = (data?.transactions ?? []).filter((t) => t.type === "Withdrawal");
   const pendingValue = rows.filter((t) => t.status === "Pending").reduce((s, t) => s + t.amount, 0);
@@ -25,9 +26,22 @@ function WithdrawalsPage() {
   const act = async (id: string, status: "Completed" | "Failed") => {
     setBusy(id);
     try {
-      await review({ data: { id, status } });
-      await refresh();
-      toast.success(status === "Completed" ? "Payout released" : "Withdrawal declined");
+      if (status === "Completed") {
+        const res = await payout({ data: { id } });
+        if (!res.ok) {
+          toast.error("Payout not sent", { description: res.error });
+          setBusy(null);
+          return;
+        }
+        await refresh();
+        toast.success(
+          res.status === "Completed" ? "Money sent to the customer's bank" : "Payout sent, awaiting bank confirmation",
+        );
+      } else {
+        await review({ data: { id, status } });
+        await refresh();
+        toast.success("Withdrawal declined");
+      }
     } catch (err) {
       toast.error("Could not update withdrawal", {
         description: err instanceof Error ? err.message : "Please try again.",
