@@ -91,6 +91,58 @@ function SidebarInner({
   );
 }
 
+function UserMenu() {
+  const { email } = useSession();
+  const initials = (email ?? "SS")
+    .replace(/@.*/, "")
+    .split(/[.\-_]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "SS";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="Account menu"
+          className="rounded-full outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Avatar className="h-8 w-8 border border-border">
+            <AvatarFallback className="bg-gradient-ink text-xs text-primary-foreground">{initials}</AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60 rounded-xl">
+        <DropdownMenuLabel className="space-y-0.5">
+          <p className="text-sm font-medium">Signed in</p>
+          <p className="truncate text-xs font-normal text-muted-foreground">{email ?? "—"}</p>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link to="/dashboard/profile" className="cursor-pointer gap-2">
+              <User className="h-4 w-4" /> Profile
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/dashboard/settings" className="cursor-pointer gap-2">
+              <Settings className="h-4 w-4" /> Settings
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/dashboard/notifications" className="cursor-pointer gap-2">
+              <Bell className="h-4 w-4" /> Notifications
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <LogoutButton variant="menu" />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function Topbar({
   title,
   onOpenSidebar,
