@@ -31,6 +31,7 @@ export type Profile = {
   full_name: string;
   phone: string | null;
   bank_name: string | null;
+  bank_code: string | null;
   account_number: string | null;
   account_name: string | null;
   referral_code: string;
@@ -201,6 +202,7 @@ export const updateProfile = createServerFn({ method: "POST" })
         full_name: z.string().max(120).optional(),
         phone: z.string().max(40).optional(),
         bank_name: z.string().max(80).optional(),
+        bank_code: z.string().max(10).optional(),
         account_number: z.string().max(20).optional(),
         account_name: z.string().max(120).optional(),
       })
