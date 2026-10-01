@@ -2,7 +2,7 @@
 const BASE = "https://api.paystack.co";
 
 function secretKey() {
-  const key = process.env["PAYSTACK_SECRET_KEY"];
+  const key = process.env["PAYSTACK_SECRET_KEY"] ?? process.env["STRIPE_LIVE_API_KEY"];
   if (!key) throw new Error("Paystack is not configured yet.");
   return key;
 }
