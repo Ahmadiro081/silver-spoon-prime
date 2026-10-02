@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Wallet, LineChart, Users, Bell, Receipt, User, Settings, Menu, X,
-  ShieldCheck, BarChart3, FileText, CircleDollarSign, ArrowDownToLine, ArrowUpFromLine, TrendingUp,
+  ShieldCheck, BarChart3, FileText, CircleDollarSign, ArrowDownToLine, ArrowUpFromLine, TrendingUp, Sparkles,
 } from "lucide-react";
 import { useState, type ReactNode, type ComponentType } from "react";
 import { Logo } from "@/components/brand/Logo";
@@ -27,6 +27,7 @@ const userNav: Item[] = [
   { to: "/dashboard/wallet", label: "Wallet", icon: Wallet },
   { to: "/dashboard/investments", label: "Investments", icon: LineChart },
   { to: "/dashboard/transactions", label: "Transactions", icon: Receipt },
+  { to: "/dashboard/insights", label: "AI Insights", icon: Sparkles },
   { to: "/dashboard/referrals", label: "Referrals", icon: Users },
   { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { to: "/dashboard/profile", label: "Profile", icon: User },
