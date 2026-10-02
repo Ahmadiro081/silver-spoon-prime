@@ -173,3 +173,17 @@ export const payoutWithdrawal = createServerFn({ method: "POST" })
 
     return { ok: true as const, status };
   });
+
+export const resolveBankAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ account_number: z.string().regex(/^\d{10}$/), bank_code: z.string().min(2).max(10) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { paystack } = await import("./paystack.server");
+    const res = await paystack<{ account_name: string }>(
+      `/bank/resolve?account_number=${data.account_number}&bank_code=${encodeURIComponent(data.bank_code)}`,
+    );
+    if (!res.ok || !res.data?.account_name) return { ok: false as const, error: "We couldn't verify this account. Check the number and bank." };
+    return { ok: true as const, account_name: res.data.account_name };
+  });

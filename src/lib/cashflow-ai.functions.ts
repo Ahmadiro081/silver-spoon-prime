@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { streamStructured } from "./ai-gateway.server";
 
 export type CashflowInsight = {
   category: string;
@@ -10,16 +11,35 @@ export type CashflowInsight = {
   tip: string;
 };
 
-const schema = {
+export type CashflowSummary = {
+  headline: string;
+  trend: "growing" | "shrinking" | "steady";
+  drivers: string[];
+  advice: string;
+};
+
+const insightSchema = {
   type: "object",
   additionalProperties: false,
   required: ["category", "direction", "essential", "explanation", "tip"],
   properties: {
-    category: { type: "string", description: "Short category, e.g. Groceries, Salary, Rent, Transport, Utilities, Entertainment, Savings, Investment, Transfer" },
+    category: { type: "string" },
     direction: { type: "string", enum: ["inflow", "outflow", "neutral"] },
-    essential: { type: "boolean", description: "True if a necessity" },
-    explanation: { type: "string", description: "2-3 sentences on how this affects the user's cash flow" },
-    tip: { type: "string", description: "One practical, short tip" },
+    essential: { type: "boolean" },
+    explanation: { type: "string", description: "2-3 sentences on cash flow effect" },
+    tip: { type: "string" },
+  },
+};
+
+const summarySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["headline", "trend", "drivers", "advice"],
+  properties: {
+    headline: { type: "string", description: "One sentence on why the balance is where it is" },
+    trend: { type: "string", enum: ["growing", "shrinking", "steady"] },
+    drivers: { type: "array", items: { type: "string" }, description: "2-4 short bullet points on what moved money" },
+    advice: { type: "string", description: "One short practical tip" },
   },
 };
 
@@ -28,64 +48,42 @@ export const analyzeTransaction = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z.object({ description: z.string().trim().min(3).max(500), amount: z.number().positive().max(1e12).optional() }).parse(d),
   )
-  .handler(async ({ data }): Promise<{ ok: true; insight: CashflowInsight } | { ok: false; error: string }> => {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) return { ok: false, error: "AI is not configured." };
-
-    const userText = `Transaction: ${data.description}${data.amount ? `\nAmount: ₦${data.amount.toLocaleString("en-NG")}` : ""}`;
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "fetch" },
-      body: JSON.stringify({
-        model: "openai/gpt-6-astra",
-        stream: true,
-        store: false,
-        reasoning: { effort: "low", summary: "auto" },
-        include: ["reasoning.encrypted_content"],
-        instructions:
-          "You are a personal finance assistant for a Nigerian user. Categorize the transaction and explain its effect on their cash flow in plain, friendly language. Use Naira (₦). Keep it brief.",
-        input: userText,
-        text: { format: { type: "json_schema", name: "cashflow_insight", strict: true, schema } },
-      }),
+  .handler(async ({ data }) => {
+    const r = await streamStructured<CashflowInsight>({
+      instructions:
+        "You are a personal finance assistant for a Nigerian user. Categorize the transaction and explain its effect on their cash flow in plain, friendly language. Use Naira (₦). Keep it brief.",
+      input: `Transaction: ${data.description}${data.amount ? `\nAmount: ₦${data.amount.toLocaleString("en-NG")}` : ""}`,
+      name: "cashflow_insight",
+      schema: insightSchema,
     });
+    return r.ok ? { ok: true as const, insight: r.value } : { ok: false as const, error: r.error };
+  });
 
-    if (!res.ok || !res.body) {
-      if (res.status === 429) return { ok: false, error: "Too many requests right now. Please try again in a moment." };
-      if (res.status === 402) return { ok: false, error: "AI credits are used up. Please top up to continue." };
-      if (res.status === 403) return { ok: false, error: "AI access is currently unavailable for this workspace." };
-      return { ok: false, error: "Couldn't analyze this transaction. Please try again." };
-    }
-
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    let text = "";
-    let refused = false;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const frame = buf.slice(0, i);
-        buf = buf.slice(i + 2);
-        for (const line of frame.split("\n")) {
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload || payload === "[DONE]") continue;
-          try {
-            const ev = JSON.parse(payload);
-            if (ev.type === "response.output_text.delta") text += ev.delta ?? "";
-            else if (ev.type === "response.refusal.delta") refused = true;
-            else if (ev.type === "response.failed" || ev.type === "error") return { ok: false, error: "The AI couldn't complete this request." };
-          } catch { /* partial */ }
-        }
-      }
-    }
-    if (refused) return { ok: false, error: "The AI declined to analyze this description." };
-    try {
-      return { ok: true, insight: JSON.parse(text) as CashflowInsight };
-    } catch {
-      return { ok: false, error: "The AI returned an unexpected answer. Please try again." };
-    }
+export const summarizeCashflow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: txns } = await context.supabase
+      .from("transactions")
+      .select("type, amount, status, method, created_at")
+      .eq("user_id", context.userId)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    const { data: invs } = await context.supabase
+      .from("investments")
+      .select("plan_name, amount, status, matures_at")
+      .eq("user_id", context.userId)
+      .limit(20);
+    if (!txns?.length && !invs?.length) return { ok: true as const, summary: null };
+    const lines = (txns ?? []).map(
+      (t) => `${t.created_at.slice(0, 10)} ${t.type} ₦${Number(t.amount).toLocaleString("en-NG")} ${t.status}${t.method ? ` via ${t.method}` : ""}`,
+    );
+    const invLines = (invs ?? []).map((i) => `${i.plan_name} ₦${Number(i.amount).toLocaleString("en-NG")} ${i.status}, matures ${i.matures_at.slice(0, 10)}`);
+    const r = await streamStructured<CashflowSummary>({
+      instructions:
+        "You explain a Nigerian investor's wallet cash flow in plain, friendly language. Explain why their money is moving: what came in, what went out, what's locked in investments, and what's pending. Use Naira (₦). Be concise.",
+      input: `Transactions (newest first):\n${lines.join("\n") || "none"}\n\nInvestments:\n${invLines.join("\n") || "none"}`,
+      name: "cashflow_summary",
+      schema: summarySchema,
+    });
+    return r.ok ? { ok: true as const, summary: r.value } : { ok: false as const, error: r.error };
   });
