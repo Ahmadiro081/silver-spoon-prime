@@ -61,6 +61,8 @@ export const getAdminOverview = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminOverview> => {
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
+    const { syncServerToken } = await import("@/lib/paystack.server");
+    await syncServerToken(supabase);
 
     const [profileRes, txnRes, invRes] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
@@ -195,8 +197,7 @@ export const completeInvestment = createServerFn({ method: "POST" })
     if (updateError) throw new Error(updateError.message);
 
     const payout = Math.round((num(inv.amount) * num(inv.roi_percent)) / 100);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error: txnError } = await supabaseAdmin.from("transactions").insert({
+    const { error: txnError } = await supabase.from("transactions").insert({
       user_id: inv.user_id,
       type: "Profit",
       amount: payout,
