@@ -33,12 +33,8 @@ export const Route = createFileRoute("/api/public/webhooks/paystack")({
               : null;
         if (!status) return new Response("ok");
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        await supabaseAdmin
-          .from("transactions")
-          .update({ status })
-          .eq("provider_ref", ref)
-          .neq("status", status);
+        const { serverSetTxnStatus } = await import("@/lib/paystack.server");
+        await serverSetTxnStatus(ref, status);
 
         return new Response("ok");
       },

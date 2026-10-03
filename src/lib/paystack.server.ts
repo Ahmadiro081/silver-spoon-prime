@@ -96,3 +96,42 @@ export async function initiateTransfer(params: {
     },
   });
 }
+
+/** sha256 of the Paystack secret — proves to the database that the caller is this app's server. */
+export async function serverTokenHash() {
+  const { createHash } = await import("crypto");
+  return createHash("sha256").update(secretKey()).digest("hex");
+}
+
+/** Lets an admin session register this server's proof with the database. */
+export async function syncServerToken(supabase: { rpc: (...a: any[]) => any }) {
+  try {
+    await supabase.rpc("sync_server_token", { p_hash: await serverTokenHash() });
+  } catch {
+    /* payments not configured yet */
+  }
+}
+
+/** Marks a payment Completed/Failed by Paystack reference without the master database key. */
+export async function serverSetTxnStatus(ref: string, status: "Completed" | "Failed") {
+  const { createClient } = await import("@supabase/supabase-js");
+  const url = process.env["SUPABASE_URL"]!;
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+  const client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: (input, init) => {
+        const h = new Headers(init?.headers);
+        if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization");
+        h.set("apikey", key);
+        return fetch(input, { ...init, headers: h });
+      },
+    },
+  });
+  const { error } = await client.rpc("server_set_txn_status" as never, {
+    p_token: secretKey(),
+    p_ref: ref,
+    p_status: status,
+  } as never);
+  if (error) throw new Error("Could not update payment status.");
+}

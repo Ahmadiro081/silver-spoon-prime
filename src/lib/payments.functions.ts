@@ -83,12 +83,8 @@ export const confirmDeposit = createServerFn({ method: "POST" })
     const paid = res.ok && res.data?.status === "success";
     if (!paid) return { ok: false as const, error: "Payment was not completed." };
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("transactions")
-      .update({ status: "Completed" })
-      .eq("id", txn.id);
-    if (error) throw new Error(error.message);
+    const { serverSetTxnStatus } = await import("@/lib/paystack.server");
+    await serverSetTxnStatus(data.reference, "Completed");
     return { ok: true as const, status: "Completed" as const };
   });
 
@@ -133,7 +129,8 @@ export const payoutWithdrawal = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Customer balance no longer covers this payout." };
     }
 
-    const { createTransferRecipient, initiateTransfer } = await import("@/lib/paystack.server");
+    const { createTransferRecipient, initiateTransfer, syncServerToken } = await import("@/lib/paystack.server");
+    await syncServerToken(supabase);
     let recipientCode: string;
     try {
       const recipient = await createTransferRecipient({
@@ -159,8 +156,7 @@ export const payoutWithdrawal = createServerFn({ method: "POST" })
     if (!transfer.ok) return { ok: false as const, error: transfer.message };
 
     const status = transfer.data?.status === "success" ? "Completed" : "Pending";
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await supabase
       .from("transactions")
       .update({
         status,
