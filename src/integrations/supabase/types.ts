@@ -173,6 +173,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      server_set_txn_status: {
+        Args: { p_ref: string; p_status: string; p_token: string }
+        Returns: number
+      }
+      sync_server_token: { Args: { p_hash: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"
