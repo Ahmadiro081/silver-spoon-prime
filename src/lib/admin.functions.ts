@@ -61,6 +61,8 @@ export const getAdminOverview = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminOverview> => {
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
+    const { syncServerToken } = await import("@/lib/paystack.server");
+    await syncServerToken(supabase);
 
     const [profileRes, txnRes, invRes] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
