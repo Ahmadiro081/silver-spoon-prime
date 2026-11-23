@@ -81,7 +81,7 @@ The frontend is intentionally decoupled so a production backend can be integrate
 2. **Supabase Authentication + Row Level Security (RLS)**: Replace mock session state in `AppStateContext` with `supabase.auth` and enforce strict `auth.uid()` + role-based admin policies in PostgreSQL.
 3. **Supabase Edge Functions**: Move authoritative financial logic (deposit confirmation webhooks, withdrawal disbursements, wallet balance ledger updates, investment maturity payouts, and referral commission credits) exclusively server-side.
 4. **Supabase Storage**: Store KYC verification documents and generated PDF client statements in private RLS-protected buckets.
-5. **Environment Variables**: Copy `.env.example` to `.env` and populate `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` when migrating `VITE_DATA_PROVIDER=supabase`.
+5. **Standalone Frontend Mode (Current)**: The application runs with `VITE_DATA_PROVIDER=mock` and requires zero database credentials, URLs, or API keys to start or build. Future backend environment variables should only be added when the new database is provisioned.
 
 ---
 

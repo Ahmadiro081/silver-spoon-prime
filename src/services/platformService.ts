@@ -98,8 +98,11 @@ export function validateWithdrawal(
       error: `Single withdrawal exceeds daily limit of ₦${settings.maxDailyWithdrawal.toLocaleString("en-NG")}.`,
     };
   }
-  if (settings.requireKycForWithdrawals && user.kycLevel === "Tier 1") {
-    return { ok: false, error: "Tier 2 or Tier 3 KYC verification is required before withdrawing funds." };
+  if (settings.requireKycForWithdrawals && (user.kycLevel === "Tier 1" || user.status === "Pending KYC")) {
+    return {
+      ok: false,
+      error: "Tier 2 or Tier 3 KYC verification is required before withdrawing funds.",
+    };
   }
   if (!user.bankAccount.accountNumber || !user.bankAccount.bankName) {
     return { ok: false, error: "Please configure a destination Nigerian bank account first." };
@@ -207,7 +210,7 @@ export function buildTransactionRecord(params: {
 }
 
 export interface PlatformServiceContract {
-  login: (email: string, password: string, roleOverride?: "investor" | "admin") => ServiceResult<UserProfile>;
+  login: (email: string, password: string) => ServiceResult<UserProfile>;
   register: (payload: {
     fullName: string;
     email: string;
@@ -217,10 +220,22 @@ export interface PlatformServiceContract {
   }) => ServiceResult<UserProfile>;
   logout: () => void;
   switchRoleDemo: (role: "investor" | "admin") => void;
+  verifyEmail: (email: string, code: string) => ServiceResult<UserProfile>;
+  requestPasswordReset: (email: string) => ServiceResult<{ resetToken: string }>;
+  resetPassword: (email: string, token: string, newPassword: string) => ServiceResult;
+  changePassword: (currentPassword: string, newPassword: string) => ServiceResult;
   createDeposit: (input: DepositInput) => ServiceResult<TransactionRecord>;
   requestWithdrawal: (input: WithdrawalInput) => ServiceResult<TransactionRecord>;
   subscribeInvestment: (input: SubscribeInvestmentInput) => ServiceResult<InvestmentRecord>;
-  updateProfile: (updates: Partial<Pick<UserProfile, "fullName" | "phone" | "city" | "address" | "twoFactorEnabled" | "emailAlerts" | "smsAlerts">>) => ServiceResult;
+  toggleInvestmentAutoCompound: (investmentId: string) => ServiceResult<InvestmentRecord>;
+  updateProfile: (
+    updates: Partial<
+      Pick<
+        UserProfile,
+        "fullName" | "phone" | "city" | "address" | "twoFactorEnabled" | "emailAlerts" | "smsAlerts"
+      >
+    >,
+  ) => ServiceResult;
   updateBankAccount: (bank: BankAccountDetails) => ServiceResult;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -229,6 +244,14 @@ export interface PlatformServiceContract {
   adminMatureInvestment: (investmentId: string) => ServiceResult<{ realizedReturn: number }>;
   adminUpdateUserStatus: (userId: string, status: AccountStatus) => ServiceResult;
   adminUpdateUserTier: (userId: string, tier: UserProfile["tier"]) => ServiceResult;
+  adminReviewUserKyc: (
+    userId: string,
+    decision: {
+      status: AccountStatus;
+      kycLevel: UserProfile["kycLevel"];
+      note?: string;
+    },
+  ) => ServiceResult;
   adminCreatePlan: (input: CreatePlanInput) => ServiceResult<InvestmentPlan>;
   adminTogglePlanStatus: (planId: string, status: InvestmentPlan["status"]) => ServiceResult;
   adminUpdatePlan: (planId: string, updates: Partial<InvestmentPlan>) => ServiceResult;

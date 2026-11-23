@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeftRight,
@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LineChart,
   LogOut,
+  MailWarning,
   Menu,
   Receipt,
   Settings,
@@ -53,19 +54,23 @@ export function UserDashboardLayout({
   const navigate = useNavigate();
   const { currentUser, unreadNotificationCount, switchRoleDemo, logout } = useAppState();
 
-  const investorDisplay =
-    currentUser.role === "investor"
-      ? currentUser
-      : { fullName: "Adaeze Okafor", email: "adaeze.okafor@silverspoon.ng", tier: "Platinum" as const };
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
 
-  const handleOpenAdmin = () => {
+  const handleSwitchAdminDemo = () => {
     switchRoleDemo("admin");
     navigate("/admin");
   };
 
   const handleSignOut = () => {
     logout();
-    navigate("/login");
+    navigate("/login", { replace: true });
   };
 
   const renderSidebar = (onNavigate?: () => void) => (
@@ -78,7 +83,10 @@ export function UserDashboardLayout({
         <p className="text-[11px] font-medium text-muted-foreground">Client Workspace</p>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4" aria-label="Client dashboard navigation">
+      <nav
+        className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4"
+        aria-label="Client dashboard navigation"
+      >
         {USER_NAV.map((item) => {
           const active = pathname === item.to;
           const Icon = item.icon;
@@ -112,13 +120,13 @@ export function UserDashboardLayout({
           type="button"
           onClick={() => {
             onNavigate?.();
-            handleOpenAdmin();
+            handleSwitchAdminDemo();
           }}
           className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
         >
           <span className="flex items-center gap-2 whitespace-nowrap">
             <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-            Admin Console
+            Switch to Admin Demo
           </span>
           <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
@@ -126,11 +134,15 @@ export function UserDashboardLayout({
         <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              {getInitials(investorDisplay.fullName)}
+              {getInitials(currentUser.fullName)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-foreground">{investorDisplay.fullName}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{investorDisplay.tier} Client</p>
+              <p className="truncate text-xs font-semibold text-foreground">
+                {currentUser.fullName}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {currentUser.tier} Client · {currentUser.kycLevel}
+              </p>
             </div>
           </div>
           <button
@@ -205,7 +217,26 @@ export function UserDashboardLayout({
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</main>
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          {currentUser.emailVerified === false && (
+            <div className="mb-6 flex flex-col justify-between gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-xs sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2.5 text-foreground">
+                <MailWarning className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <span>
+                  Your email address (<span className="font-medium">{currentUser.email}</span>) has
+                  not been verified yet.
+                </span>
+              </div>
+              <Link
+                to={`/verify-email?email=${encodeURIComponent(currentUser.email)}`}
+                className="shrink-0 font-semibold text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                Verify Email
+              </Link>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+import { getSupabasePublicConfig } from "@/services/supabase/config";
+
 export const APP_CONFIG = {
   name: "SILVER SPOON",
   legalName: "SILVER SPOON Wealth Management Ltd.",
@@ -7,13 +9,13 @@ export const APP_CONFIG = {
     symbol: "₦",
     locale: "en-NG",
   },
-  dataProvider: (import.meta.env.VITE_DATA_PROVIDER as "mock" | "supabase") || "mock",
+  dataProvider: getSupabasePublicConfig().activeProvider,
   futureBackend: {
-    database: "PostgreSQL (Supabase)",
-    authentication: "Supabase Auth + Row Level Security (RLS)",
-    storage: "Supabase Storage",
-    serverLogic: "Supabase Edge Functions",
-    supabaseUrlConfigured: Boolean(import.meta.env.VITE_SUPABASE_URL),
+    database: "PostgreSQL (planned — Phase A preparation)",
+    authentication: "Server-side Auth + Row Level Security (planned)",
+    storage: "Private Object Storage (planned)",
+    serverLogic: "Server-side Edge Functions (planned)",
+    mode: "Standalone Mock Data Provider (Supabase Standby)",
   },
   support: {
     email: "concierge@silverspoon.ng",

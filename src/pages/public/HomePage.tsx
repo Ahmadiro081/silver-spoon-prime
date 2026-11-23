@@ -7,7 +7,7 @@ import { RiskDisclosure, StatusText } from "@/components/common/Primitives";
 import { SafeImage } from "@/components/common/SafeImage";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
-import { FAQ_ITEMS, PUBLIC_STATS, TESTIMONIALS } from "@/data/mockDatabase";
+import { FAQ_ITEMS, PUBLIC_STATS, TESTIMONIALS } from "@/data/publicContent";
 import { formatNaira } from "@/utils/format";
 
 const STEPS = [
@@ -231,7 +231,7 @@ export function HomePage() {
 
               <div className="mt-6 pt-2">
                 <Link
-                  to="/dashboard/investments"
+                  to={`/dashboard/investments?plan=${encodeURIComponent(plan.id)}`}
                   className={`inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-colors ${
                     plan.featured
                       ? "bg-primary text-primary-foreground hover:bg-primary/90"

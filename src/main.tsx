@@ -2,8 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import { App } from "./App";
-import { AppStateProvider } from "./context/AppStateContext";
-import { ThemeProvider } from "./context/ThemeContext";
+import { AppStateProvider } from "./context/AppStateProvider";
+import { ThemeProvider } from "./context/ThemeProvider";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(

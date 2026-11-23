@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   Bar,
@@ -15,7 +17,10 @@ import {
   RiskDisclosure,
   SegmentedFilter,
   StatusText,
+  TableEmptyRow,
 } from "@/components/common/Primitives";
+import { Modal } from "@/components/common/Modal";
+import { InvestmentDetailModal } from "@/components/common/InvestmentDetailModal";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
 import type { InvestmentPlan } from "@/types/domain";
@@ -23,8 +28,16 @@ import { calculateInvestmentProgress, calculateProjectedReturn } from "@/utils/c
 import { daysRemaining, formatCompactNaira, formatDate, formatNaira } from "@/utils/format";
 
 export function InvestmentsPage() {
-  const { plans, userInvestments, userWallet, subscribeInvestment } = useAppState();
+  const {
+    plans,
+    userInvestments,
+    userWallet,
+    subscribeInvestment,
+    toggleInvestmentAutoCompound,
+  } = useAppState();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<InvestmentPlan | null>(null);
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState<string | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [autoCompound, setAutoCompound] = useState(true);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "Active" | "Matured">("ALL");
@@ -33,6 +46,21 @@ export function InvestmentsPage() {
   const filteredInvestments = userInvestments.filter(
     (inv) => statusFilter === "ALL" || inv.status === statusFilter,
   );
+
+  // Support deep-linking from public pages: /dashboard/investments?plan=<id>
+  useEffect(() => {
+    const planParam = searchParams.get("plan");
+    if (!planParam) return;
+    const match = plans.find((p) => p.id === planParam && p.status === "Active");
+    if (match) {
+      setSelectedPlan(match);
+      setAmountInput(String(match.minAmount));
+      setAutoCompound(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("plan");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, plans]);
 
   const openModal = (plan: InvestmentPlan) => {
     setSelectedPlan(plan);
@@ -56,6 +84,23 @@ export function InvestmentsPage() {
     setSelectedPlan(null);
   };
 
+  const handleToggleAutoCompound = (investmentId: string) => {
+    const res = toggleInvestmentAutoCompound(investmentId);
+    if (!res.ok || !res.data) {
+      toast.error(res.error ?? "Unable to update auto-compound preference.");
+      return;
+    }
+    toast.success(
+      `Auto-compound ${res.data.autoCompound ? "enabled" : "disabled"} for ${res.data.planName}.`,
+    );
+  };
+
+  const selectedInvestment =
+    userInvestments.find((i) => i.id === selectedInvestmentId) ?? null;
+  const selectedInvestmentPlan = selectedInvestment
+    ? plans.find((p) => p.id === selectedInvestment.planId)
+    : undefined;
+
   const allocationChartData = activePlans.map((plan) => {
     const invested = userInvestments
       .filter((i) => i.planId === plan.id && i.status === "Active")
@@ -64,16 +109,22 @@ export function InvestmentsPage() {
       .filter((i) => i.planId === plan.id && i.status === "Active")
       .reduce((s, i) => s + i.projectedReturn, 0);
     return {
-      name: plan.name.replace("Silver ", "").replace("Platinum ", "").replace("Sovereign ", "").replace("Heritage ", ""),
+      name: plan.name
+        .replace("Silver ", "")
+        .replace("Platinum ", "")
+        .replace("Sovereign ", "")
+        .replace("Heritage ", ""),
       principal: invested,
       projected,
     };
   });
 
+  const hasActiveAllocations = allocationChartData.some((d) => d.principal > 0);
+
   return (
     <UserDashboardLayout title="Investments & Mandates" breadcrumb="Investments">
       <div className="space-y-6">
-        {/* Portfolio Summary */}
+        {/* Portfolio Summary — Clearly distinguishing Realized vs Simulated */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             label="Active Invested Principal"
@@ -86,15 +137,16 @@ export function InvestmentsPage() {
             detail="Unallocated Naira balance"
           />
           <MetricCard
-            label="Realized Earnings"
+            label="Actual Realized Earnings"
             value={formatNaira(userWallet.realizedEarnings)}
-            detail="Settled maturity returns"
+            detail="Settled maturity returns in wallet"
+            delta="Realized"
             deltaTone="positive"
           />
           <MetricCard
-            label="Accrued (Illustrative)"
+            label="Simulated Accrued (Est.)"
             value={formatNaira(userWallet.projectedAccrual)}
-            detail="Non-guaranteed accrual estimate"
+            detail="Illustrative & unrealized — not guaranteed"
           />
         </section>
 
@@ -106,7 +158,8 @@ export function InvestmentsPage() {
                 Allocation by Mandate
               </h2>
               <p className="text-xs text-muted-foreground">
-                Active principal compared against illustrative target returns across open Naira mandates
+                Active principal compared against simulated illustrative target returns across open
+                Naira mandates
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -116,42 +169,71 @@ export function InvestmentsPage() {
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-chart-3" />
-                Illustrative Target Return
+                Simulated Target Return
               </span>
             </div>
           </div>
 
-          <div className="mt-5 h-[230px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={allocationChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tickFormatter={(v) => formatCompactNaira(Number(v))}
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={64}
-                />
-                <Tooltip
-                  formatter={(value: number) => formatNaira(value)}
-                  contentStyle={{
-                    backgroundColor: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "10px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="principal" name="Active Principal" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="projected" name="Target Return (Est.)" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {!hasActiveAllocations ? (
+            <div className="mt-5 flex h-[210px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-secondary/25 px-6 text-center">
+              <p className="font-display text-base font-medium text-foreground">
+                No active mandates allocated yet
+              </p>
+              <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                Select any open Naira investment plan below to allocate funds from your available
+                balance and track projected vs realized returns.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 h-[230px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={allocationChartData}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => formatCompactNaira(Number(v))}
+                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => formatNaira(value)}
+                    contentStyle={{
+                      backgroundColor: "var(--color-card)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                    }}
+                  />
+                  <Bar
+                    dataKey="principal"
+                    name="Active Principal"
+                    fill="var(--color-chart-1)"
+                    radius={[6, 6, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="projected"
+                    name="Simulated Target Return"
+                    fill="var(--color-chart-3)"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </section>
 
         {/* Available Investment Plan Cards */}
@@ -161,7 +243,8 @@ export function InvestmentsPage() {
               Open Naira Investment Plans
             </h2>
             <p className="text-xs text-muted-foreground">
-              Select a plan to allocate capital from your available Naira wallet. All target returns are illustrative and not guaranteed.
+              Select a plan to allocate capital from your available Naira wallet. All target returns
+              are illustrative simulations and not guaranteed profits.
             </p>
           </div>
 
@@ -228,7 +311,7 @@ export function InvestmentsPage() {
                 Investment History
               </h2>
               <p className="text-xs text-muted-foreground">
-                Active and matured Naira portfolio allocations
+                Inspect individual mandate statements, payout schedules, and auto-compound controls
               </p>
             </div>
             <SegmentedFilter
@@ -248,56 +331,98 @@ export function InvestmentsPage() {
                 <tr>
                   <th className="px-6 py-3 font-medium">Mandate</th>
                   <th className="px-6 py-3 text-right font-medium">Principal</th>
-                  <th className="px-6 py-3 text-right font-medium">Target Return*</th>
+                  <th className="px-6 py-3 text-right font-medium">Sim. Target*</th>
                   <th className="px-6 py-3 font-medium">Progress</th>
+                  <th className="px-6 py-3 font-medium">Auto-Compound</th>
                   <th className="px-6 py-3 font-medium">Maturity</th>
                   <th className="px-6 py-3 text-right font-medium">Status</th>
+                  <th className="px-6 py-3 text-right font-medium">Statement</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredInvestments.map((inv) => {
-                  const pct = calculateInvestmentProgress(inv.startedAt, inv.maturesAt, inv.status);
-                  return (
-                    <tr key={inv.id} className="hover:bg-secondary/25">
-                      <td className="px-6 py-3.5">
-                        <p className="font-medium text-foreground">{inv.planName}</p>
-                        <p className="font-tabular text-xs text-muted-foreground">
-                          {inv.id} · {inv.riskBand} risk · {inv.durationDays}d
-                        </p>
-                      </td>
-                      <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground">
-                        {formatNaira(inv.principal)}
-                      </td>
-                      <td className="font-tabular px-6 py-3.5 text-right text-xs">
-                        <p className="font-semibold text-success">
-                          +{formatNaira(inv.projectedReturn)}
-                        </p>
-                        <p className="text-muted-foreground">{inv.targetReturnPercent}% est.</p>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <div className="w-28">
-                          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                            <div
-                              className="h-full rounded-full bg-primary"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <p className="font-tabular mt-1 text-[11px] text-muted-foreground">
-                            {inv.status === "Active"
-                              ? `${pct}% · ${daysRemaining(inv.maturesAt)}d left`
-                              : "100% completed"}
+                {filteredInvestments.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={8}
+                    title="No investment mandates found"
+                    description={
+                      statusFilter === "ALL"
+                        ? "You have not subscribed to any investment mandate yet. Select a plan above to allocate available funds."
+                        : `No ${statusFilter.toLowerCase()} mandates match the selected filter.`
+                    }
+                  />
+                ) : (
+                  filteredInvestments.map((inv) => {
+                    const pct = calculateInvestmentProgress(
+                      inv.startedAt,
+                      inv.maturesAt,
+                      inv.status,
+                    );
+                    return (
+                      <tr
+                        key={inv.id}
+                        onClick={() => setSelectedInvestmentId(inv.id)}
+                        className="cursor-pointer hover:bg-secondary/25"
+                      >
+                        <td className="px-6 py-3.5">
+                          <p className="font-medium text-foreground">{inv.planName}</p>
+                          <p className="font-tabular text-xs text-muted-foreground">
+                            {inv.id} · {inv.riskBand} risk · {inv.durationDays}d
                           </p>
-                        </div>
-                      </td>
-                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
-                        {formatDate(inv.maturesAt)}
-                      </td>
-                      <td className="px-6 py-3.5 text-right">
-                        <StatusText status={inv.status} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground">
+                          {formatNaira(inv.principal)}
+                        </td>
+                        <td className="font-tabular px-6 py-3.5 text-right text-xs">
+                          <p className="font-semibold text-success">
+                            +{formatNaira(inv.projectedReturn)}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {inv.status === "Matured"
+                              ? "Realized & settled"
+                              : `${inv.targetReturnPercent}% sim. est.`}
+                          </p>
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <div className="w-28">
+                            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <p className="font-tabular mt-1 text-[11px] text-muted-foreground">
+                              {inv.status === "Active"
+                                ? `${pct}% · ${daysRemaining(inv.maturesAt)}d left`
+                                : "100% completed"}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5 text-xs text-muted-foreground">
+                          {inv.autoCompound ? "Enabled" : "Disabled"}
+                        </td>
+                        <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
+                          {formatDate(inv.maturesAt)}
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          <StatusText status={inv.status} />
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedInvestmentId(inv.id);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
+                          >
+                            <FileText className="h-3 w-3" />
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -306,109 +431,110 @@ export function InvestmentsPage() {
         <RiskDisclosure text={APP_CONFIG.disclosures.investmentRisk} />
       </div>
 
-      {/* Allocation Modal */}
-      {selectedPlan && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="alloc-modal-title"
-        >
-          <div className="surface-card w-full max-w-lg p-6 shadow-elevated">
-            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Simulated Mandate Subscription</p>
-                <h3 id="alloc-modal-title" className="font-display mt-1 text-2xl font-medium text-foreground">
-                  {selectedPlan.name}
-                </h3>
+      {/* Accessible Allocation Modal */}
+      <Modal
+        open={Boolean(selectedPlan)}
+        onClose={() => setSelectedPlan(null)}
+        title={selectedPlan?.name ?? ""}
+        subtitle="Simulated Mandate Subscription"
+        maxWidthClass="max-w-lg"
+      >
+        {selectedPlan && (
+          <form onSubmit={handleSubscribe} className="space-y-4">
+            <div>
+              <div className="flex justify-between text-xs">
+                <label htmlFor="alloc-amt" className="font-medium text-foreground">
+                  Principal Amount (₦)
+                </label>
+                <span className="font-tabular text-muted-foreground">
+                  Available: {formatNaira(userWallet.availableBalance)}
+                </span>
               </div>
+              <input
+                id="alloc-amt"
+                type="number"
+                min={selectedPlan.minAmount}
+                max={selectedPlan.maxAmount}
+                step={10000}
+                value={amountInput}
+                onChange={(e) => setAmountInput(e.target.value)}
+                className="font-tabular mt-1.5 h-11 w-full rounded-lg border border-input bg-background px-3.5 text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="font-tabular mt-1 text-[11px] text-muted-foreground">
+                Range: {formatNaira(selectedPlan.minAmount)} – {formatNaira(selectedPlan.maxAmount)}
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-secondary/40 p-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Lock-in Tenor</span>
+                <span className="font-tabular font-medium text-foreground">
+                  {selectedPlan.durationDays} days
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Simulated Target Return (Est.)</span>
+                <span className="font-tabular font-semibold text-success">
+                  +
+                  {formatNaira(
+                    calculateProjectedReturn(
+                      Number(amountInput) || 0,
+                      selectedPlan.targetReturnPercent,
+                    ),
+                  )}{" "}
+                  ({selectedPlan.targetReturnPercent}%)
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Payout Cadence</span>
+                <span className="font-medium text-foreground">{selectedPlan.payoutFrequency}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Risk Classification</span>
+                <StatusText status={selectedPlan.riskBand} />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={autoCompound}
+                onChange={(e) => setAutoCompound(e.target.checked)}
+                className="rounded border-input accent-primary"
+              />
+              Enable automatic re-allocation preference at maturity
+            </label>
+
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {selectedPlan.riskNote}
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setSelectedPlan(null)}
-                className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
               >
-                Close
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Confirm Allocation
               </button>
             </div>
+          </form>
+        )}
+      </Modal>
 
-            <form onSubmit={handleSubscribe} className="mt-5 space-y-4">
-              <div>
-                <div className="flex justify-between text-xs">
-                  <label htmlFor="alloc-amt" className="font-medium text-foreground">
-                    Principal Amount (₦)
-                  </label>
-                  <span className="font-tabular text-muted-foreground">
-                    Available: {formatNaira(userWallet.availableBalance)}
-                  </span>
-                </div>
-                <input
-                  id="alloc-amt"
-                  type="number"
-                  min={selectedPlan.minAmount}
-                  max={selectedPlan.maxAmount}
-                  step={10000}
-                  value={amountInput}
-                  onChange={(e) => setAmountInput(e.target.value)}
-                  className="font-tabular mt-1.5 h-11 w-full rounded-lg border border-input bg-background px-3.5 text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <p className="font-tabular mt-1 text-[11px] text-muted-foreground">
-                  Range: {formatNaira(selectedPlan.minAmount)} – {formatNaira(selectedPlan.maxAmount)}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-border bg-secondary/40 p-4 text-xs space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Lock-in Tenor</span>
-                  <span className="font-tabular font-medium text-foreground">
-                    {selectedPlan.durationDays} days
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Illustrative Target Return</span>
-                  <span className="font-tabular font-semibold text-success">
-                    +{formatNaira(calculateProjectedReturn(Number(amountInput) || 0, selectedPlan.targetReturnPercent))}{" "}
-                    ({selectedPlan.targetReturnPercent}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Risk Classification</span>
-                  <StatusText status={selectedPlan.riskBand} />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={autoCompound}
-                  onChange={(e) => setAutoCompound(e.target.checked)}
-                  className="rounded border-input accent-primary"
-                />
-                Enable automatic re-allocation preference at maturity
-              </label>
-
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {selectedPlan.riskNote}
-              </p>
-
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPlan(null)}
-                  className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Confirm Allocation
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Individual Investment Statement, Payout Schedule & Auto-Compound Modal */}
+      <InvestmentDetailModal
+        investment={selectedInvestment}
+        plan={selectedInvestmentPlan}
+        onClose={() => setSelectedInvestmentId(null)}
+        onToggleAutoCompound={handleToggleAutoCompound}
+      />
     </UserDashboardLayout>
   );
 }

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import {
@@ -10,10 +11,9 @@ import {
   YAxis,
 } from "recharts";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
-import { MetricCard, StatusText } from "@/components/common/Primitives";
+import { MetricCard, StatusText, TableEmptyRow } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
-import { MONTHLY_PERFORMANCE } from "@/data/mockDatabase";
-import { calculateUserWalletMetrics } from "@/utils/calculations";
+import { buildPlatformMonthlyMetrics, calculateUserWalletMetrics } from "@/utils/calculations";
 import { formatCompactNaira, formatDateTime, formatNaira } from "@/utils/format";
 
 export function AdminOverviewPage() {
@@ -37,6 +37,11 @@ export function AdminOverviewPage() {
   const activeMandatesValue = investments
     .filter((i) => i.status === "Active")
     .reduce((s, i) => s + i.principal, 0);
+
+  const monthlyFlows = useMemo(
+    () => buildPlatformMonthlyMetrics(users, transactions, investments),
+    [users, transactions, investments],
+  );
 
   return (
     <AdminDashboardLayout
@@ -85,7 +90,7 @@ export function AdminOverviewPage() {
                   Monthly Naira Treasury Flows
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Platform-wide confirmed deposits vs settled withdrawals (7-month series)
+                  Live ledger-derived confirmed deposits vs settled withdrawals (rolling 7 months)
                 </p>
               </div>
               <Link
@@ -98,7 +103,7 @@ export function AdminOverviewPage() {
 
             <div className="mt-5 h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={MONTHLY_PERFORMANCE} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <BarChart data={monthlyFlows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                   <XAxis
                     dataKey="month"
@@ -214,19 +219,27 @@ export function AdminOverviewPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {auditLogs.slice(0, 5).map((log) => (
-                  <tr key={log.id} className="hover:bg-secondary/25">
-                    <td className="font-tabular px-6 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(log.timestamp)}
-                    </td>
-                    <td className="px-6 py-3 text-xs font-medium text-foreground">{log.actorName}</td>
-                    <td className="font-tabular px-6 py-3 text-xs text-muted-foreground">{log.action}</td>
-                    <td className="px-6 py-3 text-xs text-muted-foreground">{log.summary}</td>
-                    <td className="px-6 py-3 text-right">
-                      <StatusText status={log.severity} />
-                    </td>
-                  </tr>
-                ))}
+                {auditLogs.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={5}
+                    title="No audit events recorded"
+                    description="Platform operations, treasury reviews, and security updates will appear here."
+                  />
+                ) : (
+                  auditLogs.slice(0, 5).map((log) => (
+                    <tr key={log.id} className="hover:bg-secondary/25">
+                      <td className="font-tabular px-6 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(log.timestamp)}
+                      </td>
+                      <td className="px-6 py-3 text-xs font-medium text-foreground">{log.actorName}</td>
+                      <td className="font-tabular px-6 py-3 text-xs text-muted-foreground">{log.action}</td>
+                      <td className="px-6 py-3 text-xs text-muted-foreground">{log.summary}</td>
+                      <td className="px-6 py-3 text-right">
+                        <StatusText status={log.severity} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

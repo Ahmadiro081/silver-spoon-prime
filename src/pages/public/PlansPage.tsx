@@ -137,7 +137,7 @@ export function PlansPage() {
 
               <div className="mt-6 flex items-center gap-3 pt-2">
                 <Link
-                  to="/dashboard/investments"
+                  to={`/dashboard/investments?plan=${encodeURIComponent(plan.id)}`}
                   className="inline-flex h-10 flex-1 items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
                 >
                   Open Mandate in Dashboard

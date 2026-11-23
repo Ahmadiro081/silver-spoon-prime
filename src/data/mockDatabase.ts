@@ -1,39 +1,23 @@
 import { APP_CONFIG } from "@/config/app";
 import type {
   AuditLogEntry,
-  FaqItem,
   InvestmentPlan,
   InvestmentRecord,
   MonthlyPerformancePoint,
-  NigerianBank,
   NotificationItem,
   PlatformSettings,
   ReferralRecord,
-  TestimonialItem,
   TransactionRecord,
   UserProfile,
 } from "@/types/domain";
-
-export const NIGERIAN_BANKS: NigerianBank[] = [
-  { name: "Guaranty Trust Bank (GTBank)", code: "058" },
-  { name: "Zenith Bank", code: "057" },
-  { name: "Access Bank", code: "044" },
-  { name: "First Bank of Nigeria", code: "011" },
-  { name: "United Bank for Africa (UBA)", code: "033" },
-  { name: "Stanbic IBTC Bank", code: "221" },
-  { name: "Fidelity Bank", code: "070" },
-  { name: "First City Monument Bank (FCMB)", code: "214" },
-  { name: "Wema Bank", code: "035" },
-  { name: "Providus Bank", code: "101" },
-  { name: "Sterling Bank", code: "232" },
-  { name: "Kuda Microfinance Bank", code: "50211" },
-];
 
 export const INITIAL_USERS: UserProfile[] = [
   {
     id: "USR-1001",
     fullName: "Adaeze Okafor",
     email: "adaeze.okafor@silverspoon.ng",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 803 555 0142",
     city: "Lagos",
     address: "18 Bourdillon Road, Ikoyi, Lagos",
@@ -41,6 +25,7 @@ export const INITIAL_USERS: UserProfile[] = [
     tier: "Platinum",
     status: "Active",
     kycLevel: "Tier 3",
+    kycNote: "BVN, NIN, and proof of address verified.",
     referralCode: "SS-ADAEZE24",
     joinedAt: "2025-11-12T09:15:00Z",
     lastLoginAt: "2026-11-22T14:20:00Z",
@@ -60,6 +45,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "ADM-0001",
     fullName: "Oluwaseun Adeyemi",
     email: "admin@silverspoon.ng",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 809 220 8800",
     city: "Lagos",
     address: "14 Adeola Odeku Street, Victoria Island, Lagos",
@@ -67,6 +54,7 @@ export const INITIAL_USERS: UserProfile[] = [
     tier: "Sovereign",
     status: "Active",
     kycLevel: "Tier 3",
+    kycNote: "Internal compliance officer clearance.",
     referralCode: "SS-EXEC01",
     joinedAt: "2025-06-01T08:00:00Z",
     lastLoginAt: "2026-11-22T16:45:00Z",
@@ -85,6 +73,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "USR-1002",
     fullName: "Ngozi Achebe",
     email: "ngozi.achebe@meridianfoods.ng",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 805 412 9081",
     city: "Lagos",
     address: "9 Admiralty Way, Lekki Phase 1, Lagos",
@@ -111,6 +101,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "USR-1003",
     fullName: "Kunle Adebayo",
     email: "kunle.adebayo@paygrid.io",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 812 908 4419",
     city: "Abuja",
     address: "24 Aminu Kano Crescent, Wuse II, Abuja",
@@ -136,6 +128,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "USR-1004",
     fullName: "Dr. Amara Uche",
     email: "amara.uche@oakbridgeclinic.ng",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 803 771 2349",
     city: "Port Harcourt",
     address: "7 Tombia Extension, GRA Phase 2, Port Harcourt",
@@ -161,6 +155,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "USR-1005",
     fullName: "Ifeoma Okonkwo",
     email: "ifeoma.okonkwo@northstar.ng",
+    password: "silverspoon2026",
+    emailVerified: true,
     phone: "+234 806 318 7762",
     city: "Lagos",
     address: "42 Glover Road, Ikoyi, Lagos",
@@ -187,6 +183,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: "USR-1006",
     fullName: "Zainab Yusuf",
     email: "zainab.yusuf@kanotextiles.ng",
+    password: "silverspoon2026",
+    emailVerified: false,
     phone: "+234 809 551 0934",
     city: "Abuja",
     address: "11 Maitama Close, Maitama, Abuja",
@@ -194,6 +192,7 @@ export const INITIAL_USERS: UserProfile[] = [
     tier: "Silver",
     status: "Pending KYC",
     kycLevel: "Tier 1",
+    kycNote: "Awaiting NIN & utility bill compliance review.",
     referralCode: "SS-ZAINAB33",
     referredBy: "SS-ADAEZE24",
     joinedAt: "2026-11-08T10:15:00Z",
@@ -659,6 +658,9 @@ export const INITIAL_REFERRALS: ReferralRecord[] = [
     referredUserEmail: "ngozi.achebe@meridianfoods.ng",
     joinedAt: "2026-01-19T11:30:00Z",
     qualifyingInvestment: 2_500_000,
+    qualifyingInvestmentId: "INV-4095",
+    qualifiedAt: "2026-10-05T14:00:00Z",
+    payoutTxnId: "TXN-8831",
     commissionRatePercent: 3,
     commissionEarned: 75_000,
     status: "Paid",
@@ -672,6 +674,9 @@ export const INITIAL_REFERRALS: ReferralRecord[] = [
     referredUserEmail: "ifeoma.okonkwo@northstar.ng",
     joinedAt: "2026-04-12T13:20:00Z",
     qualifyingInvestment: 800_000,
+    qualifyingInvestmentId: "INV-4002",
+    qualifiedAt: "2026-07-18T10:50:00Z",
+    payoutTxnId: "TXN-8752",
     commissionRatePercent: 3,
     commissionEarned: 24_000,
     status: "Paid",
@@ -698,6 +703,8 @@ export const INITIAL_REFERRALS: ReferralRecord[] = [
     referredUserEmail: "kunle.adebayo@paygrid.io",
     joinedAt: "2026-03-04T15:05:00Z",
     qualifyingInvestment: 350_000,
+    qualifyingInvestmentId: "INV-4099",
+    qualifiedAt: "2026-11-08T13:15:00Z",
     commissionRatePercent: 3,
     commissionEarned: 10_500,
     status: "Active",
@@ -847,96 +854,4 @@ export const USER_PORTFOLIO_HISTORY = [
   { month: "Sep", balance: 3_890_000, invested: 1_500_000, realized: 64_200 },
   { month: "Oct", balance: 4_020_000, invested: 1_500_000, realized: 95_600 },
   { month: "Nov", balance: 4_094_600, invested: 1_950_000, realized: 194_600 },
-];
-
-export const PUBLIC_STATS = [
-  { value: "₦4.89B", label: "Simulated Assets Under Administration", detail: "Q4 2026 Ledger Snapshot" },
-  { value: "12,640", label: "Active Client Accounts", detail: "Lagos · Abuja · Port Harcourt" },
-  { value: "4 Mandates", label: "Structured Naira Portfolios", detail: "30 to 365 Day Tenors" },
-  { value: "₦50,000", label: "Entry Allocation Minimum", detail: "Zero Account Maintenance Fee" },
-];
-
-export const TESTIMONIALS: TestimonialItem[] = [
-  {
-    id: "t1",
-    name: "Ngozi Achebe",
-    role: "Managing Director",
-    organization: "Meridian Foods Nigeria Ltd.",
-    city: "Lagos",
-    outcome: "Consolidated ₦18M in seasonal treasury reserves across 90-day mandates",
-    quote:
-      "We moved our idle quarterly supplier reserves into SILVER SPOON's Platinum Fixed Income mandate. Every maturity schedule, risk disclosure, and ledger entry is clear enough for our external auditors.",
-  },
-  {
-    id: "t2",
-    name: "Kunle Adebayo",
-    role: "Principal Software Architect",
-    organization: "PayGrid Systems",
-    city: "Abuja",
-    outcome: "Structured monthly Naira allocations with zero spreadsheet tracking",
-    quote:
-      "Most investment apps hide behind vague return promises. SILVER SPOON treats me like an adult — clear risk bands, honest projections, and an uncluttered wallet ledger.",
-  },
-  {
-    id: "t3",
-    name: "Dr. Amara Uche",
-    role: "Chief Medical Director",
-    organization: "Oakbridge Specialist Clinic",
-    city: "Port Harcourt",
-    outcome: "Built a disciplined 180-day capital reserve for medical equipment expansion",
-    quote:
-      "The Sovereign Private Credit reporting gives me complete visibility into lock-in dates and accrued performance while I focus on running my hospital.",
-  },
-];
-
-export const FAQ_ITEMS: FaqItem[] = [
-  {
-    id: "faq-1",
-    category: "General",
-    question: "What is SILVER SPOON?",
-    answer:
-      "SILVER SPOON is a Naira-native private wealth and structured investment platform designed for Nigerian individuals, professionals, and corporate treasuries seeking disciplined portfolio allocation and transparent ledger reporting.",
-  },
-  {
-    id: "faq-2",
-    category: "Investments & Risk",
-    question: "Are the target returns shown on investment plans guaranteed?",
-    answer:
-      "No. All investment returns presented on SILVER SPOON are illustrative target projections based on underlying fixed-income, treasury, and private-credit models. Every investment carries risk, and actual realized performance depends on prevailing market conditions.",
-  },
-  {
-    id: "faq-3",
-    category: "Wallet & Funding",
-    question: "What is the minimum amount required to start investing?",
-    answer:
-      "You can fund your Naira wallet starting from ₦10,000 and open your first allocation on the Silver Treasury Reserve plan starting from ₦50,000.",
-  },
-  {
-    id: "faq-4",
-    category: "Wallet & Funding",
-    question: "How do withdrawals and settlement fees work?",
-    answer:
-      "Withdrawals from your available Naira balance are routed to your verified Nigerian bank account after treasury verification. Standard withdrawals attract zero platform fees; high-value wire settlements above ₦10,000,000 carry a flat ₦2,500 transfer fee.",
-  },
-  {
-    id: "faq-5",
-    category: "Referrals & Security",
-    question: "How does the SILVER SPOON Referral Program calculate commissions?",
-    answer:
-      "When an invited client opens an account with your unique referral link and completes a qualifying investment allocation, you earn a 3% commission credited to your referral earnings ledger.",
-  },
-  {
-    id: "faq-6",
-    category: "Referrals & Security",
-    question: "How are client accounts and financial operations protected in production?",
-    answer:
-      "The production architecture is designed around PostgreSQL with Supabase Authentication, strict Row Level Security (RLS), and server-side Edge Functions so all balance mutations, deposit verifications, and payout disbursements are validated on the server.",
-  },
-  {
-    id: "faq-7",
-    category: "Investments & Risk",
-    question: "Can I liquidate an active fixed-tenor investment before maturity?",
-    answer:
-      "Each mandate has a defined tenor (30, 90, 180, or 365 days). Funds committed to an active mandate remain locked until maturity so underlying instruments are not disrupted; once matured, principal and realized returns settle to your available balance.",
-  },
 ];

@@ -10,16 +10,19 @@ const STATUS_MAP: Record<string, StatusTone> = {
   Matured: "success",
   Verified: "success",
   Low: "success",
+  "Low Risk": "success",
   Info: "info",
   Pending: "warning",
   "Pending KYC": "warning",
   Moderate: "warning",
+  "Moderate Risk": "warning",
   Paused: "warning",
   Review: "warning",
   Declined: "danger",
   Suspended: "danger",
   Cancelled: "danger",
   Elevated: "danger",
+  "Elevated Risk": "danger",
   Critical: "danger",
   Archived: "neutral",
 };
@@ -44,7 +47,9 @@ export function StatusText({ status, showIcon = false }: { status: string; showI
           : Info;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${TONE_CLASS[tone]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${TONE_CLASS[tone]}`}
+    >
       {showIcon && <Icon className="h-3.5 w-3.5 shrink-0" />}
       {status}
     </span>
@@ -80,7 +85,9 @@ export function MetricCard({
       {(detail || delta) && (
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
           {detail && <span className="truncate text-muted-foreground">{detail}</span>}
-          {delta && <span className={`font-tabular shrink-0 font-medium ${deltaClass}`}>{delta}</span>}
+          {delta && (
+            <span className={`font-tabular shrink-0 font-medium ${deltaClass}`}>{delta}</span>
+          )}
         </div>
       )}
     </div>
@@ -147,6 +154,49 @@ export function EmptyState({
   );
 }
 
+export function TableEmptyRow({
+  colSpan,
+  title,
+  description,
+  action,
+}: {
+  colSpan: number;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-6 py-12 text-center">
+        <p className="font-display text-base font-medium text-foreground">{title}</p>
+        <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">{description}</p>
+        {action && <div className="mt-4 flex justify-center">{action}</div>}
+      </td>
+    </tr>
+  );
+}
+
+export function PageLoadingSkeleton() {
+  return (
+    <div
+      className="flex min-h-screen flex-col items-center justify-center bg-background px-6"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="w-full max-w-4xl space-y-5">
+        <div className="h-7 w-48 animate-pulse rounded-md bg-secondary" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+          <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+          <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+        </div>
+        <div className="h-64 animate-pulse rounded-xl border border-border bg-card" />
+      </div>
+      <span className="sr-only">Loading SILVER SPOON interface...</span>
+    </div>
+  );
+}
+
 export function SegmentedFilter<T extends string>({
   options,
   value,
@@ -165,7 +215,7 @@ export function SegmentedFilter<T extends string>({
             key={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+            className={`rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               active
                 ? "bg-card text-foreground shadow-subtle"
                 : "text-muted-foreground hover:text-foreground"

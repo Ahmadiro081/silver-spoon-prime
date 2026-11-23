@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { PublicLayout } from "@/layouts/PublicLayout";
 import { SegmentedFilter } from "@/components/common/Primitives";
-import { FAQ_ITEMS } from "@/data/mockDatabase";
+import { FAQ_ITEMS } from "@/data/publicContent";
 import type { FaqItem } from "@/types/domain";
 
 export function FaqPage() {

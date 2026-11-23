@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
-import { SegmentedFilter, StatusText } from "@/components/common/Primitives";
+import { SegmentedFilter, StatusText, TableEmptyRow } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 import type { AuditLogEntry } from "@/types/domain";
 import { formatDateTime } from "@/utils/format";
@@ -63,30 +63,38 @@ export function AdminAuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((log) => (
-                  <tr key={log.id} className="hover:bg-secondary/25">
-                    <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(log.timestamp)}
-                    </td>
-                    <td className="px-6 py-3.5 text-xs">
-                      <p className="font-medium text-foreground">{log.actorName}</p>
-                      <p className="capitalize text-muted-foreground">{log.actorRole}</p>
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-xs">
-                      <p className="font-medium text-foreground">{log.action}</p>
-                      <p className="text-muted-foreground">
-                        {log.targetType} · {log.targetId}
-                      </p>
-                    </td>
-                    <td className="px-6 py-3.5 text-xs text-muted-foreground">{log.summary}</td>
-                    <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
-                      {log.ipAddress}
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      <StatusText status={log.severity} />
-                    </td>
-                  </tr>
-                ))}
+                {filtered.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={6}
+                    title="No audit events match your filters"
+                    description="Clear your search keyword or select All Severities to view full platform history."
+                  />
+                ) : (
+                  filtered.map((log) => (
+                    <tr key={log.id} className="hover:bg-secondary/25">
+                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(log.timestamp)}
+                      </td>
+                      <td className="px-6 py-3.5 text-xs">
+                        <p className="font-medium text-foreground">{log.actorName}</p>
+                        <p className="capitalize text-muted-foreground">{log.actorRole}</p>
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-xs">
+                        <p className="font-medium text-foreground">{log.action}</p>
+                        <p className="text-muted-foreground">
+                          {log.targetType} · {log.targetId}
+                        </p>
+                      </td>
+                      <td className="px-6 py-3.5 text-xs text-muted-foreground">{log.summary}</td>
+                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
+                        {log.ipAddress}
+                      </td>
+                      <td className="px-6 py-3.5 text-right">
+                        <StatusText status={log.severity} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowDownToLine,
@@ -74,7 +74,16 @@ export function AdminDashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { transactions, switchRoleDemo, logout } = useAppState();
+  const { currentUser, transactions, switchRoleDemo, logout } = useAppState();
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
 
   const pendingWithdrawalsCount = transactions.filter(
     (t) => t.type === "Withdrawal" && t.status === "Pending",
@@ -83,14 +92,14 @@ export function AdminDashboardLayout({
     (t) => t.type === "Deposit" && t.status === "Pending",
   ).length;
 
-  const handleOpenClient = () => {
+  const handleSwitchInvestorDemo = () => {
     switchRoleDemo("investor");
     navigate("/dashboard");
   };
 
   const handleSignOut = () => {
     logout();
-    navigate("/login");
+    navigate("/login", { replace: true });
   };
 
   const renderSidebar = (onNavigate?: () => void) => (
@@ -105,7 +114,10 @@ export function AdminDashboardLayout({
         </p>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3" aria-label="Admin console navigation">
+      <nav
+        className="flex-1 space-y-5 overflow-y-auto px-3 py-3"
+        aria-label="Admin console navigation"
+      >
         {ADMIN_GROUPS.map((group) => (
           <div key={group.label}>
             <p className="px-3 pb-1.5 text-[11px] font-medium text-muted-foreground">
@@ -154,21 +166,21 @@ export function AdminDashboardLayout({
           type="button"
           onClick={() => {
             onNavigate?.();
-            handleOpenClient();
+            handleSwitchInvestorDemo();
           }}
           className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
         >
           <span className="flex items-center gap-2 whitespace-nowrap">
             <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-            Client Portal View
+            Switch to Investor Demo
           </span>
           <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
 
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-foreground">Oluwaseun Adeyemi</p>
-            <p className="truncate text-[11px] text-muted-foreground">Operations Director</p>
+            <p className="truncate text-xs font-semibold text-foreground">{currentUser.fullName}</p>
+            <p className="truncate text-[11px] text-muted-foreground">Administrator · Ops</p>
           </div>
           <button
             type="button"

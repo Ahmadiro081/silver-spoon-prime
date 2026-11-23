@@ -1,16 +1,24 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
 
 export function AdminSettingsPage() {
-  const { settings, adminUpdateSettings, resetDemoState } = useAppState();
+  const { settings, resetVersion, adminUpdateSettings, resetDemoState } = useAppState();
   const [form, setForm] = useState(settings);
+
+  useEffect(() => {
+    setForm(settings);
+  }, [settings, resetVersion]);
 
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
-    adminUpdateSettings(form);
+    const res = adminUpdateSettings(form);
+    if (!res.ok) {
+      toast.error(res.error ?? "Unable to update platform settings.");
+      return;
+    }
     toast.success("Platform operational settings updated and logged.");
   };
 

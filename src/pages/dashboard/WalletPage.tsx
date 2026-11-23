@@ -1,18 +1,33 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { UserDashboardLayout } from "@/layouts/UserDashboardLayout";
-import { MetricCard, RiskDisclosure, SegmentedFilter, StatusText } from "@/components/common/Primitives";
+import {
+  MetricCard,
+  RiskDisclosure,
+  SegmentedFilter,
+  StatusText,
+  TableEmptyRow,
+} from "@/components/common/Primitives";
+import { TransactionReceiptModal } from "@/components/common/TransactionReceiptModal";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
-import { NIGERIAN_BANKS } from "@/data/mockDatabase";
+import { NIGERIAN_BANKS } from "@/data/nigerianBanks";
+import type { TransactionRecord } from "@/types/domain";
 import { formatDateTime, formatNaira, maskAccountNumber } from "@/utils/format";
 
 const DEPOSIT_PRESETS = [50_000, 150_000, 500_000, 1_500_000];
-const CHANNELS = ["NIP Bank Transfer", "Corporate Wire Transfer", "Nigerian Debit Card", "USSD Transfer"];
+const CHANNELS = [
+  "NIP Bank Transfer",
+  "Corporate Wire Transfer",
+  "Nigerian Debit Card",
+  "USSD Transfer",
+];
 
 export function WalletPage() {
   const {
     currentUser,
+    resetVersion,
     userWallet,
     userTransactions,
     settings,
@@ -23,6 +38,7 @@ export function WalletPage() {
 
   const [mode, setMode] = useState<"deposit" | "withdraw" | "bank">("deposit");
   const [historyTab, setHistoryTab] = useState<"all" | "deposits" | "withdrawals">("all");
+  const [selectedTxn, setSelectedTxn] = useState<TransactionRecord | null>(null);
 
   // Deposit form state
   const [depAmount, setDepAmount] = useState("200000");
@@ -33,10 +49,25 @@ export function WalletPage() {
   const [wdrAmount, setWdrAmount] = useState("100000");
   const [wdrNote, setWdrNote] = useState("");
 
-  // Bank details form state
+  // Bank details form state (synced on account switch & demo reset)
   const [bankCode, setBankCode] = useState(currentUser.bankAccount.bankCode || "058");
   const [accountNumber, setAccountNumber] = useState(currentUser.bankAccount.accountNumber || "");
-  const [accountName, setAccountName] = useState(currentUser.bankAccount.accountName || currentUser.fullName.toUpperCase());
+  const [accountName, setAccountName] = useState(
+    currentUser.bankAccount.accountName || currentUser.fullName.toUpperCase(),
+  );
+
+  useEffect(() => {
+    setBankCode(currentUser.bankAccount.bankCode || "058");
+    setAccountNumber(currentUser.bankAccount.accountNumber || "");
+    setAccountName(currentUser.bankAccount.accountName || currentUser.fullName.toUpperCase());
+  }, [
+    currentUser.id,
+    currentUser.fullName,
+    currentUser.bankAccount.bankCode,
+    currentUser.bankAccount.accountNumber,
+    currentUser.bankAccount.accountName,
+    resetVersion,
+  ]);
 
   const handleDeposit = (e: FormEvent) => {
     e.preventDefault();
@@ -252,8 +283,9 @@ export function WalletPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Destination Bank</span>
                     <span className="font-medium text-foreground">
-                      {currentUser.bankAccount.bankName}{" "}
-                      {maskAccountNumber(currentUser.bankAccount.accountNumber)}
+                      {currentUser.bankAccount.accountNumber
+                        ? `${currentUser.bankAccount.bankName} ${maskAccountNumber(currentUser.bankAccount.accountNumber)}`
+                        : "No payout bank configured"}
                     </span>
                   </div>
                   <div className="mt-2 flex justify-between">
@@ -296,7 +328,10 @@ export function WalletPage() {
             {mode === "bank" && (
               <form onSubmit={handleBankSave} className="mt-5 space-y-4">
                 <div>
-                  <label htmlFor="bank-select" className="block text-xs font-medium text-foreground">
+                  <label
+                    htmlFor="bank-select"
+                    className="block text-xs font-medium text-foreground"
+                  >
                     Nigerian Bank
                   </label>
                   <select
@@ -329,7 +364,10 @@ export function WalletPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bank-holder" className="block text-xs font-medium text-foreground">
+                    <label
+                      htmlFor="bank-holder"
+                      className="block text-xs font-medium text-foreground"
+                    >
                       Account Holder Name
                     </label>
                     <input
@@ -371,7 +409,7 @@ export function WalletPage() {
                 <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">NUBAN</dt>
                   <dd className="font-tabular font-medium text-foreground">
-                    {currentUser.bankAccount.accountNumber || "Not set"}
+                    {currentUser.bankAccount.accountNumber || "Not configured"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -407,7 +445,7 @@ export function WalletPage() {
             <div>
               <h2 className="font-display text-lg font-medium text-foreground">Wallet History</h2>
               <p className="text-xs text-muted-foreground">
-                Inspect deposits, withdrawal requests, and complete ledger settlements
+                Click any entry to inspect its full simulated receipt breakdown
               </p>
             </div>
             <SegmentedFilter
@@ -431,35 +469,63 @@ export function WalletPage() {
                   <th className="px-6 py-3 font-medium">Timestamp</th>
                   <th className="px-6 py-3 text-right font-medium">Amount</th>
                   <th className="px-6 py-3 text-right font-medium">Status</th>
+                  <th className="px-6 py-3 text-right font-medium">Receipt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {historyRows.map((txn) => (
-                  <tr key={txn.id} className="hover:bg-secondary/25">
-                    <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
-                      {txn.reference}
-                    </td>
-                    <td className="px-6 py-3.5 font-medium text-foreground">{txn.type}</td>
-                    <td className="px-6 py-3.5">
-                      <p className="text-xs font-medium text-foreground">{txn.channel}</p>
-                      {txn.note && <p className="text-[11px] text-muted-foreground">{txn.note}</p>}
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
-                      {formatDateTime(txn.createdAt)}
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground">
-                      {formatNaira(txn.amount)}
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      <StatusText status={txn.status} />
-                    </td>
-                  </tr>
-                ))}
+                {historyRows.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={7}
+                    title="No wallet records in this view"
+                    description="Submit a simulated deposit or withdrawal above to create ledger entries."
+                  />
+                ) : (
+                  historyRows.map((txn) => (
+                    <tr
+                      key={txn.id}
+                      onClick={() => setSelectedTxn(txn)}
+                      className="cursor-pointer hover:bg-secondary/25"
+                    >
+                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
+                        {txn.reference}
+                      </td>
+                      <td className="px-6 py-3.5 font-medium text-foreground">{txn.type}</td>
+                      <td className="px-6 py-3.5">
+                        <p className="text-xs font-medium text-foreground">{txn.channel}</p>
+                        {txn.note && <p className="text-[11px] text-muted-foreground">{txn.note}</p>}
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
+                        {formatDateTime(txn.createdAt)}
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground">
+                        {formatNaira(txn.amount)}
+                      </td>
+                      <td className="px-6 py-3.5 text-right">
+                        <StatusText status={txn.status} />
+                      </td>
+                      <td className="px-6 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTxn(txn);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          <Receipt className="h-3 w-3" />
+                          Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </section>
       </div>
+
+      <TransactionReceiptModal transaction={selectedTxn} onClose={() => setSelectedTxn(null)} />
     </UserDashboardLayout>
   );
 }

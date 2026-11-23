@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -13,53 +14,86 @@ import {
   YAxis,
 } from "recharts";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
-import { MetricCard } from "@/components/common/Primitives";
+import { EmptyState, MetricCard } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
-import { MONTHLY_PERFORMANCE } from "@/data/mockDatabase";
+import { buildPlatformMonthlyMetrics } from "@/utils/calculations";
 import { formatCompactNaira, formatNaira, formatNumber } from "@/utils/format";
 
-const PIE_COLORS = ["#0f1d36", "#4b6584", "#15803d", "#b45309"];
+const PIE_COLORS = ["#0f1d36", "#4b6584", "#15803d", "#b45309", "#64748b"];
 
 export function AdminAnalyticsPage() {
-  const { investments, plans } = useAppState();
+  const { users, transactions, investments, plans } = useAppState();
 
-  const planDistribution = plans
-    .map((p) => ({
-      name: p.name,
-      value: investments
-        .filter((i) => i.planId === p.id)
-        .reduce((s, i) => s + i.principal, 0),
-    }))
-    .filter((d) => d.value > 0);
+  const monthlySeries = useMemo(
+    () => buildPlatformMonthlyMetrics(users, transactions, investments),
+    [users, transactions, investments],
+  );
 
-  const latest = MONTHLY_PERFORMANCE[MONTHLY_PERFORMANCE.length - 1]!;
-  const netFlow = latest.deposits - latest.withdrawals;
+  const planDistribution = useMemo(
+    () =>
+      plans
+        .map((p) => ({
+          name: p.name,
+          value: investments
+            .filter((i) => i.planId === p.id && i.status !== "Cancelled")
+            .reduce((s, i) => s + i.principal, 0),
+        }))
+        .filter((d) => d.value > 0),
+    [plans, investments],
+  );
+
+  const latest = monthlySeries[monthlySeries.length - 1] ?? {
+    month: "Current",
+    deposits: 0,
+    withdrawals: 0,
+    portfolioValue: 0,
+    realizedEarnings: 0,
+    activeUsers: 0,
+  };
+  const previous = monthlySeries[monthlySeries.length - 2];
+
+  const aumChangePct =
+    previous && previous.portfolioValue > 0
+      ? ((latest.portfolioValue - previous.portfolioValue) / previous.portfolioValue) * 100
+      : null;
+
+  const cumulativeNetInflow = monthlySeries.reduce((s, m) => s + (m.deposits - m.withdrawals), 0);
+  const cumulativeRealized = transactions
+    .filter((t) => t.type === "Realized Return" && t.status === "Completed")
+    .reduce((s, t) => s + t.amount, 0);
 
   return (
     <AdminDashboardLayout title="Financial Analytics" breadcrumb="Analytics">
       <div className="space-y-6">
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
-            label="Latest Month Portfolio AUM"
+            label="Live Platform Portfolio AUM"
             value={formatCompactNaira(latest.portfolioValue)}
-            delta="+8.2% MoM"
-            deltaTone="positive"
+            delta={
+              aumChangePct !== null
+                ? `${aumChangePct >= 0 ? "+" : ""}${aumChangePct.toFixed(1)}% vs ${previous?.month}`
+                : undefined
+            }
+            deltaTone={
+              aumChangePct === null ? "neutral" : aumChangePct >= 0 ? "positive" : "negative"
+            }
+            detail={`Exact: ${formatNaira(latest.portfolioValue)}`}
           />
           <MetricCard
-            label="Latest Month Net Inflow"
-            value={formatCompactNaira(netFlow)}
-            detail={`In ${formatCompactNaira(latest.deposits)} / Out ${formatCompactNaira(latest.withdrawals)}`}
+            label="7-Month Net Treasury Flow"
+            value={formatCompactNaira(cumulativeNetInflow)}
+            detail={`Latest month: In ${formatCompactNaira(latest.deposits)} / Out ${formatCompactNaira(latest.withdrawals)}`}
+            deltaTone={cumulativeNetInflow >= 0 ? "positive" : "negative"}
           />
           <MetricCard
-            label="Realized Returns Distributed"
-            value={formatCompactNaira(latest.realizedEarnings)}
-            detail="Simulated monthly settlement"
+            label="Cumulative Realized Returns"
+            value={formatCompactNaira(cumulativeRealized)}
+            detail={`Current month: ${formatNaira(latest.realizedEarnings)}`}
           />
           <MetricCard
-            label="Platform Active Accounts"
+            label="Active Non-Suspended Accounts"
             value={formatNumber(latest.activeUsers)}
-            delta="+5.9% MoM"
-            deltaTone="positive"
+            detail={`Out of ${users.filter((u) => u.role === "investor").length} registered investors`}
           />
         </section>
 
@@ -69,11 +103,11 @@ export function AdminAnalyticsPage() {
               Portfolio AUM Trajectory (NGN)
             </h2>
             <p className="text-xs text-muted-foreground">
-              Cumulative simulated assets under administration across Naira mandates
+              Live ledger-derived assets under administration across all active investor accounts
             </p>
             <div className="mt-5 h-[270px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={MONTHLY_PERFORMANCE}>
+                <AreaChart data={monthlySeries}>
                   <defs>
                     <linearGradient id="aumGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="var(--color-chart-1)" stopOpacity={0.22} />
@@ -101,41 +135,52 @@ export function AdminAnalyticsPage() {
           <div className="surface-card p-6 lg:col-span-4">
             <h2 className="font-display text-xl font-medium text-foreground">Mandate Mix</h2>
             <p className="text-xs text-muted-foreground">Share of total allocated Naira principal</p>
-            <div className="mt-4 h-[210px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={planDistribution}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={54}
-                    outerRadius={82}
-                    paddingAngle={3}
-                  >
-                    {planDistribution.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => formatNaira(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-3 space-y-2 text-xs">
-              {planDistribution.map((d, i) => (
-                <div key={d.name} className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 truncate text-muted-foreground">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-xs"
-                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-                    />
-                    <span className="truncate">{d.name}</span>
-                  </span>
-                  <span className="font-tabular font-medium text-foreground">
-                    {formatCompactNaira(d.value)}
-                  </span>
+            {planDistribution.length === 0 ? (
+              <div className="mt-6">
+                <EmptyState
+                  title="No allocations recorded"
+                  description="Mandate distribution will display once investors subscribe to active plans."
+                />
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 h-[210px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={planDistribution}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={54}
+                        outerRadius={82}
+                        paddingAngle={3}
+                      >
+                        {planDistribution.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatNaira(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="mt-3 space-y-2 text-xs">
+                  {planDistribution.map((d, i) => (
+                    <div key={d.name} className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 truncate text-muted-foreground">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-xs"
+                          style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                        />
+                        <span className="truncate">{d.name}</span>
+                      </span>
+                      <span className="font-tabular font-medium text-foreground">
+                        {formatCompactNaira(d.value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -143,13 +188,15 @@ export function AdminAnalyticsPage() {
           <h2 className="font-display text-xl font-medium text-foreground">
             Client Growth & Realized Distributions
           </h2>
-          <p className="text-xs text-muted-foreground">Monthly active account growth trajectory</p>
+          <p className="text-xs text-muted-foreground">
+            Rolling 7-month registered investor count computed from live account records
+          </p>
           <div className="mt-5 h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MONTHLY_PERFORMANCE}>
+              <BarChart data={monthlySeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => formatNumber(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={56} />
+                <YAxis allowDecimals={false} tickFormatter={(v) => formatNumber(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={48} />
                 <Tooltip
                   formatter={(v: number) => formatNumber(v)}
                   contentStyle={{

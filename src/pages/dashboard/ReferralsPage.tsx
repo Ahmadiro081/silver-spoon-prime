@@ -1,22 +1,41 @@
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Search } from "lucide-react";
 import { toast } from "sonner";
 import { UserDashboardLayout } from "@/layouts/UserDashboardLayout";
-import { MetricCard, StatusText } from "@/components/common/Primitives";
+import {
+  MetricCard,
+  SegmentedFilter,
+  StatusText,
+  TableEmptyRow,
+} from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
+import type { ReferralRecord } from "@/types/domain";
 import { formatDate, formatNaira } from "@/utils/format";
 
 export function ReferralsPage() {
   const { currentUser, userReferrals, settings } = useAppState();
   const [copiedField, setCopiedField] = useState<"link" | "code" | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ReferralRecord["status"]>("ALL");
 
-  const investorCode = currentUser.role === "investor" ? currentUser.referralCode : "SS-ADAEZE24";
+  const investorCode = currentUser.referralCode;
   const origin = typeof window !== "undefined" ? window.location.origin : "https://silverspoon.ng";
   const referralLink = `${origin}/register?ref=${investorCode}`;
 
   const totalEarned = userReferrals.reduce((s, r) => s + r.commissionEarned, 0);
   const qualifiedCount = userReferrals.filter((r) => r.qualifyingInvestment > 0).length;
   const totalReferredVolume = userReferrals.reduce((s, r) => s + r.qualifyingInvestment, 0);
+
+  const filteredReferrals = userReferrals.filter((ref) => {
+    const matchesStatus = statusFilter === "ALL" || ref.status === statusFilter;
+    const q = query.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      ref.referredUserName.toLowerCase().includes(q) ||
+      ref.referredUserEmail.toLowerCase().includes(q) ||
+      ref.id.toLowerCase().includes(q);
+    return matchesStatus && matchesQuery;
+  });
 
   const copyValue = async (text: string, kind: "link" | "code") => {
     try {
@@ -38,7 +57,7 @@ export function ReferralsPage() {
             label="Commission Earned"
             value={formatNaira(totalEarned)}
             detail="Credited to Naira wallet"
-            deltaTone="positive"
+            deltaTone={totalEarned > 0 ? "positive" : "neutral"}
           />
           <MetricCard
             label="Total Invited Clients"
@@ -53,7 +72,7 @@ export function ReferralsPage() {
           <MetricCard
             label="Commission Rate"
             value={`${settings.referralCommissionPercent.toFixed(1)}%`}
-            detail="Paid on qualifying first investment"
+            detail="Paid automatically on first qualifying mandate"
           />
         </section>
 
@@ -64,7 +83,7 @@ export function ReferralsPage() {
               Your Unique Referral Link
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Share your private invitation link with colleagues or corporate treasury peers.
+              Share your personal invitation link with colleagues or corporate treasury peers.
             </p>
 
             <div className="mt-5 space-y-4">
@@ -140,13 +159,13 @@ export function ReferralsPage() {
               </li>
               <li>
                 <span className="font-semibold text-foreground">02. Qualifying Allocation — </span>
-                Once they verify KYC and allocate into any active Naira mandate (min. ₦50,000), the
-                referral qualifies.
+                When they subscribe to their first active Naira mandate (min. ₦50,000), the
+                referral qualifies automatically once per referred client.
               </li>
               <li>
-                <span className="font-semibold text-foreground">03. Wallet Settlement — </span>
-                A {settings.referralCommissionPercent}% commission is logged and settled into your
-                Available Balance after compliance check.
+                <span className="font-semibold text-foreground">03. Instant Simulated Settlement — </span>
+                A {settings.referralCommissionPercent}% simulated commission is credited to your
+                Available Balance with a ledger transaction and notification.
               </li>
             </ol>
           </div>
@@ -154,11 +173,35 @@ export function ReferralsPage() {
 
         {/* Referral History Table */}
         <section className="surface-card overflow-hidden">
-          <div className="border-b border-border px-6 py-4">
-            <h2 className="font-display text-lg font-medium text-foreground">Referral History</h2>
-            <p className="text-xs text-muted-foreground">
-              Invited accounts and commission payout status
-            </p>
+          <div className="flex flex-col gap-3 border-b border-border px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="font-display text-lg font-medium text-foreground">Referral History</h2>
+              <p className="text-xs text-muted-foreground">
+                Invited accounts and commission payout status
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative w-full sm:w-56">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search invitee..."
+                  className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <SegmentedFilter
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { label: "All", value: "ALL" },
+                  { label: "Paid", value: "Paid" },
+                  { label: "Active", value: "Active" },
+                  { label: "Pending", value: "Pending" },
+                ]}
+              />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -172,26 +215,42 @@ export function ReferralsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {userReferrals.map((ref) => (
-                  <tr key={ref.id} className="hover:bg-secondary/25">
-                    <td className="px-6 py-3.5">
-                      <p className="font-medium text-foreground">{ref.referredUserName}</p>
-                      <p className="text-xs text-muted-foreground">{ref.referredUserEmail}</p>
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
-                      {formatDate(ref.joinedAt)}
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-right text-foreground">
-                      {formatNaira(ref.qualifyingInvestment)}
-                    </td>
-                    <td className="font-tabular px-6 py-3.5 text-right font-semibold text-success">
-                      {formatNaira(ref.commissionEarned)}
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      <StatusText status={ref.status} />
-                    </td>
-                  </tr>
-                ))}
+                {filteredReferrals.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={5}
+                    title={
+                      userReferrals.length === 0
+                        ? "No referred clients yet"
+                        : "No referrals match your filters"
+                    }
+                    description={
+                      userReferrals.length === 0
+                        ? "Share your personal referral link above to invite investors and earn simulated referral commissions on their first qualifying mandate."
+                        : "Clear your search or status filter to inspect all invited accounts."
+                    }
+                  />
+                ) : (
+                  filteredReferrals.map((ref) => (
+                    <tr key={ref.id} className="hover:bg-secondary/25">
+                      <td className="px-6 py-3.5">
+                        <p className="font-medium text-foreground">{ref.referredUserName}</p>
+                        <p className="text-xs text-muted-foreground">{ref.referredUserEmail}</p>
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDate(ref.joinedAt)}
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-right text-foreground whitespace-nowrap">
+                        {formatNaira(ref.qualifyingInvestment)}
+                      </td>
+                      <td className="font-tabular px-6 py-3.5 text-right font-semibold text-success whitespace-nowrap">
+                        {formatNaira(ref.commissionEarned)}
+                      </td>
+                      <td className="px-6 py-3.5 text-right whitespace-nowrap">
+                        <StatusText status={ref.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

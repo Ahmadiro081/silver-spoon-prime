@@ -3,10 +3,21 @@ export type AccountStatus = "Active" | "Pending KYC" | "Suspended";
 export type RiskBand = "Low" | "Moderate" | "Elevated";
 export type PlanStatus = "Active" | "Paused" | "Archived";
 export type InvestmentStatus = "Active" | "Matured" | "Cancelled";
-export type TransactionType = "Deposit" | "Withdrawal" | "Investment" | "Realized Return" | "Referral Commission";
+export type TransactionType =
+  | "Deposit"
+  | "Withdrawal"
+  | "Investment"
+  | "Realized Return"
+  | "Referral Commission";
 export type TransactionStatus = "Completed" | "Pending" | "Declined";
 export type ReferralStatus = "Active" | "Pending" | "Paid";
-export type NotificationCategory = "deposit" | "withdrawal" | "investment" | "referral" | "security" | "platform";
+export type NotificationCategory =
+  | "deposit"
+  | "withdrawal"
+  | "investment"
+  | "referral"
+  | "security"
+  | "platform";
 
 export interface BankAccountDetails {
   bankName: string;
@@ -20,6 +31,8 @@ export interface UserProfile {
   id: string;
   fullName: string;
   email: string;
+  password?: string;
+  emailVerified?: boolean;
   phone: string;
   city: string;
   address: string;
@@ -27,6 +40,8 @@ export interface UserProfile {
   tier: "Silver" | "Platinum" | "Sovereign";
   status: AccountStatus;
   kycLevel: "Tier 1" | "Tier 2" | "Tier 3";
+  kycNote?: string;
+  kycUpdatedAt?: string;
   referralCode: string;
   referredBy?: string;
   joinedAt: string;
@@ -77,6 +92,15 @@ export interface InvestmentRecord {
   autoCompound: boolean;
 }
 
+export interface PayoutScheduleItem {
+  installment: number;
+  label: string;
+  scheduledDate: string;
+  projectedAmount: number;
+  principalComponent: number;
+  status: "Settled" | "Projected";
+}
+
 export interface TransactionRecord {
   id: string;
   reference: string;
@@ -103,6 +127,9 @@ export interface ReferralRecord {
   referredUserEmail: string;
   joinedAt: string;
   qualifyingInvestment: number;
+  qualifyingInvestmentId?: string;
+  qualifiedAt?: string;
+  payoutTxnId?: string;
   commissionRatePercent: number;
   commissionEarned: number;
   status: ReferralStatus;
@@ -124,7 +151,16 @@ export interface AuditLogEntry {
   actorName: string;
   actorRole: UserRole | "system";
   action: string;
-  targetType: "User" | "Deposit" | "Withdrawal" | "Investment" | "Plan" | "Referral" | "Settings" | "Notification";
+  targetType:
+    | "User"
+    | "Deposit"
+    | "Withdrawal"
+    | "Investment"
+    | "Plan"
+    | "Referral"
+    | "Settings"
+    | "Notification"
+    | "Security";
   targetId: string;
   summary: string;
   severity: "Info" | "Review" | "Critical";
@@ -155,6 +191,13 @@ export interface WalletMetrics {
   realizedEarnings: number;
   referralEarnings: number;
   projectedAccrual: number;
+}
+
+export interface UserPortfolioPoint {
+  month: string;
+  balance: number;
+  invested: number;
+  realized: number;
 }
 
 export interface MonthlyPerformancePoint {

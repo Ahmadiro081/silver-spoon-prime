@@ -28,14 +28,14 @@ export function RegisterPage() {
       setError(res.error ?? "Unable to create account.");
       return;
     }
-    toast.success("Account created in simulation mode. Welcome to SILVER SPOON.");
-    navigate("/dashboard");
+    toast.success("Account created. Complete simulated email verification to finish onboarding.");
+    navigate(`/verify-email?email=${encodeURIComponent(res.data.email)}`);
   };
 
   return (
     <AuthLayout
       title="Open a SILVER SPOON account"
-      subtitle="Create a Naira wealth portfolio profile with transparent ledger accounting."
+      subtitle="Create an independent Naira wealth profile starting with a clean ₦0 wallet ledger."
       footer={
         <>
           Already have an account?{" "}
@@ -47,9 +47,12 @@ export function RegisterPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {error && (
-          <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive">
+          <div
+            role="alert"
+            className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive"
+          >
             {error}
-          </p>
+          </div>
         )}
 
         <div>
