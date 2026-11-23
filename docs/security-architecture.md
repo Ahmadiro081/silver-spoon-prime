@@ -1,10 +1,10 @@
 # SILVER SPOON — Security, Governance & Authorization Architecture
 
-**Status**: Phase B Security Foundation Implemented & Locally Verified (`20261123001000`–`20261123001200`: 40/40 tables with `ENABLE` + `FORCE ROW LEVEL SECURITY`, 62 RLS policies, 42/42 `SECURITY DEFINER` functions with pinned `search_path = public, pg_temp`, universal four-eyes enforcement verified via `npm run test:db`; remote staging push pending dedicated staging project ref).  
-**Security Posture**: Defense-in-depth — zero trust in frontend state, restrictive PostgreSQL grants (`REVOKE ALL`), mandatory table-specific forced RLS, universal four-eyes financial/governance controls, scheduled treasury settlement, and vendor-agnostic KYC due diligence.
+**Status**: Phase B.5 Security Hardening Implemented & Locally Verified (`20261123001000`–`20261123001300`: 40/40 tables with `ENABLE` + `FORCE ROW LEVEL SECURITY`, 63 RLS policies, 43/43 `SECURITY DEFINER` functions with pinned `search_path = public, pg_temp`, verified via 24/24 local PGlite tests; remote Supabase staging verification pending dedicated staging project provisioning).  
+**Security Posture**: Defense-in-depth — zero trust in frontend state, restrictive PostgreSQL grants (`REVOKE ALL` + explicit `REVOKE CREATE ON SCHEMA public`), mandatory table-specific forced RLS, universal four-eyes financial/governance controls, scheduled treasury settlement, and vendor-agnostic KYC due diligence.
 
 > **Non-Production & Regulatory Notice**  
-> No live authentication, live payment processing, real KYC collection, or customer fund custody is enabled or authorized in Phase B. `payment_providers.is_enabled` is seeded `false` and `VITE_DATA_PROVIDER=mock` remains active. Regulatory registrations, SEC/CBN authorizations, custodian agreements, and payment provider approvals are **not** represented as already obtained.
+> No live authentication, live payment processing, real KYC collection, or customer fund custody is enabled or authorized in Phase B / B.5. `payment_providers.is_enabled` is seeded `false` and `VITE_DATA_PROVIDER=mock` remains active. Regulatory registrations, SEC/CBN authorizations, custodian agreements, and payment provider approvals are **not** represented as already obtained.
 
 ---
 
@@ -43,28 +43,31 @@ In the initial operating model, **no exemption threshold applies** to investor p
 
 ## 3. Restrictive PostgreSQL Grants, Controlled RPCs & Table-Specific RLS (ADR-009)
 
-### 3.1 Least-Privilege Database Grants
-Before enabling any client access in future phases, migrations MUST enforce a deny-by-default privilege posture:
+### 3.1 Least-Privilege Database Grants & `service_role` `BYPASSRLS` Containment
+Migrations enforce a deny-by-default privilege posture (Migrations `0012` & `0013`):
 ```sql
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated;
 
-GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, silver_spoon_treasury_worker, silver_spoon_reconciler;
 -- Explicit table-level SELECT only where RLS-protected client reads are required.
 -- Explicit EXECUTE granted ONLY on audited, parameter-validated RPC functions.
 ```
+- **Supabase `service_role` `BYPASSRLS` Handling**: On hosted Supabase, `service_role` carries `BYPASSRLS` (`rolbypassrls = true`), meaning it bypasses even `FORCE ROW LEVEL SECURITY`. Consequently, `service_role` keys MUST NEVER be bundled into browser code or used by staff UI sessions; staff actions execute exclusively under each staff member's authenticated JWT (`authenticated` role + `auth.uid()`), while `service_role` is strictly confined to server-side webhook/settlement Edge Functions and reconciliation jobs that enforce independent provider verification and idempotency before calling settlement RPCs.
 
-### 3.2 Hardened `SECURITY DEFINER` RPC Standards
+### 3.2 Hardened `SECURITY DEFINER` RPC Standards (43/43 Verified)
 Every financial or privileged RPC MUST:
-- Declare `SECURITY DEFINER SET search_path = public, pg_temp` to block schema-hijacking attacks.
-- Read identity strictly from `auth.uid()` (never accept client-supplied `actor_id` or `role`).
+- Be owned strictly by a privileged migration owner (`postgres` / `supabase_admin`) and declare `SECURITY DEFINER SET search_path = public, pg_temp` with explicitly schema-qualified references (`public.*`, `auth.uid()`).
+- **Accurate Caller-Role Detection (Migration 0013)**: Never rely on `current_user` inside a `SECURITY DEFINER` function (which resolves to the function owner). Always use `public.internal_is_service_caller()` inspecting `request.jwt.claim.role`, `current_setting('role', true)`, and `session_user`.
+- Read caller identity strictly from `auth.uid()` (never accept client-supplied `actor_id` or `role`).
+- Prevent cross-user role enumeration: `app_has_role`, `app_has_any_role`, `app_is_staff`, and `app_account_can_transact` return `false` if a non-service caller probes any UUID other than `auth.uid()`.
 - Verify account status (`active`, not `suspended`/`closed`/`frozen`) and active `public.user_roles` membership.
-- Acquire deterministic `SELECT ... FOR UPDATE` row locks before reading/mutating balances or approval states.
-- Enforce idempotency keys and write `audit_logs` within the same ACID transaction.
+- Acquire deterministic `SELECT ... FOR UPDATE` row locks before reading/mutating balances or approval states, enforce idempotency keys, and write `audit_logs` within the same ACID transaction.
 
-### 3.3 Table-Specific Row Level Security (`ENABLE` + `FORCE ROW LEVEL SECURITY`)
+### 3.3 Table-Specific Row Level Security (`ENABLE` + `FORCE ROW LEVEL SECURITY` on 40/40 Tables — 63 Policies)
 
 | Table Group | `SELECT` Policy | `INSERT` / `UPDATE` / `DELETE` Policy |
 | :--- | :--- | :--- |
@@ -73,9 +76,9 @@ Every financial or privileged RPC MUST:
 | `transactions`, `deposits`, `withdrawals`, `withdrawal_batches`, `transaction_fees`, `transaction_references` | Investor: own `transactions`/`deposits`/`withdrawals` only (zero visibility into `withdrawal_batches`); Staff: role-scoped | Direct client DML **DENIED**. Writes allowed exclusively via financial & treasury RPCs. |
 | `tax_rules`, `tax_applications` | `tax_rules`: authenticated read of active rules; `tax_applications`: investor own rows + `finance_officer`/`super_admin` | Direct client DML **DENIED**. `tax_rules` modified only via four-eyes `super_admin` RPC; `tax_applications` append-only. |
 | `investments`, `investment_allocations`, `investment_payouts`, `investment_maturities` | Investor: own `investments`/`investment_payouts`/`investment_maturities` (`user_id = auth.uid()`); Staff: role-scoped | Direct client DML **DENIED**. Writes via `create_investment`, `update_investment_rollover_mode`, `mature_investment`, `distribute_investment_payout` RPCs only. |
-| `investment_plans` | Authenticated/Public: `status IN ('active','paused')`; Staff: All | `admin`/`super_admin` via RPC only; `DELETE` denied (archive only). |
+| `investment_plans` | **Anonymous (`anon`)**: `status = 'active'` **ONLY** (`paused` and `archived` hidden); **Authenticated Investors**: `status = 'active'` OR plans where the investor holds an existing `investments` position; **Staff**: All | `admin`/`super_admin` via RPC only; `DELETE` denied (archive only). |
 | `referrals`, `referral_commissions`, `referral_settings` | Investor: `referrer_user_id = auth.uid()`; Staff: role-scoped | RPC-only; commission payout requires four-eyes approval. |
-| `kyc_records`, `kyc_documents`, `kyc_reviews`, `compliance_events` | Investor: own `kyc_records`/`kyc_documents` metadata only; `compliance_officer`/`super_admin`: All | Investor submits own KYC via RPC; reviews & compliance events strictly `compliance_officer`/`super_admin` via RPC. `DELETE` denied. |
+| `kyc_records`, `kyc_documents`, `kyc_reviews`, `compliance_events` | Investor: own `kyc_records`/`kyc_documents` metadata only; `compliance_officer`/`super_admin`: All (Finance & Admin blocked) | Investor submits own KYC via RPC; reviews & compliance events strictly `compliance_officer`/`super_admin` via RPC. `DELETE` denied. |
 | `user_roles`, `platform_settings`, `audit_logs`, `admin_actions` | `user_roles`: own + `admin`/`super_admin`; `admin_actions`/`audit_logs`: scoped staff only | `user_roles`/`platform_settings`: four-eyes `super_admin` RPC only; `audit_logs`: append-only trigger (no `UPDATE`/`DELETE`). |
 | `payment_providers`, `payment_references`, `payment_events`, `webhook_logs` | `finance_officer`, `super_admin` only | Server-side Edge Functions only; zero investor visibility. |
 
@@ -93,7 +96,7 @@ The initial withdrawal operating model uses **scheduled treasury settlement** wi
 1. **Reservation**: Investor calls `request_withdrawal` → RPC locks wallet, validates KYC/limits/verified NUBAN, debits `2010-{USER}-AVAIL`, credits `2020-{USER}-RESV`, assigns an idempotent `payout_idempotency_ref`, and sets status `pending_approval`.
 2. **Independent Four-Eyes Approval**: A qualified finance/treasury approver (distinct from the initiator and the investor) reviews and approves the withdrawal into a scheduled `withdrawal_batches` window, generating an immutable `admin_actions` + `audit_logs` record.
 3. **Scheduled Batch Release**: At the scheduled settlement window, an independent second reviewer verifies batch totals against external treasury bank liquidity before triggering payout execution with deterministic idempotent references.
-4. **Verified Settlement Finalization**: Funds are debited from `2020-{USER}-RESV` against `1020-TREASURY-BANK` (and any applicable fee/tax accounts) **only after verified settlement confirmation**. Failed or declined transfers reverse the reservation back to `2010-{USER}-AVAIL` via a balanced journal entry.
+4. **Verified Settlement Finalization & Verified-Failure Release**: Funds are debited from `2020-{USER}-RESV` against `1020-TREASURY-BANK` (and any applicable fee/tax accounts) **only after verified settlement confirmation**. Failed payout reservations may **only** be released back to `2010-{USER}-AVAIL` via a verified backend `service_role` / `silver_spoon_treasury_worker` failure callback (enforced in Migration `0013`); pre-disbursement declines require independent `finance_officer`/`super_admin` action (blocking self-decline).
 
 > **Strict Settlement Rule**: **Never release funds, mark a deposit credited, or finalize a withdrawal settlement based solely on a client-side response or an unverified webhook.**
 

@@ -1,49 +1,140 @@
 -- ============================================================================
--- SILVER SPOON — Staging Multi-Session Concurrency Verification Guide (SQL)
+-- SILVER SPOON — Remote Staging Multi-Session Concurrency Verification Suite
 --
--- Purpose: Supplement the embedded PGlite test suite (scripts/db/run-phase-b-tests.mjs)
--- with true multi-connection row-lock contention verification once a dedicated,
--- isolated non-production Supabase staging PostgreSQL instance is provisioned.
+-- Purpose: Execute all 6 required true multi-connection row-lock contention tests
+-- across at least TWO independent PostgreSQL sessions (Session A & Session B)
+-- connected ONLY to a dedicated, isolated non-production Supabase staging DB.
 --
--- Run Session A and Session B concurrently in two psql terminals connected to
--- the dedicated non-production staging database ONLY (never production).
+-- NEVER execute against production or real customer records.
+-- Prerequisite: All 13 migrations (0001-0013) + supabase/seed/staging_synthetic_seed.sql
+--               applied on the dedicated staging project.
 -- ============================================================================
 
--- ----------------------------------------------------------------------------
--- TEST 1: Concurrent Withdrawal Row-Lock Contention (SELECT ... FOR UPDATE)
--- Precondition: Synthetic Investor 1 has exactly 30,000,000 kobo available.
--- Expected Outcome:
---   - Session A acquires FOR UPDATE on wallet_balances and reserves 20,000,000 kobo.
---   - Session B blocks on FOR UPDATE until Session A commits, then re-evaluates
---     available_kobo (now 10,000,000 < 20,000,000) and FAILS with
---     INSUFFICIENT_AVAILABLE_BALANCE.
--- ----------------------------------------------------------------------------
-
+-- ============================================================================
+-- SCENARIO 1: Concurrent Withdrawals (Overlapping FOR UPDATE Lock Contention)
+-- Precondition: Investor 1 has 30,000,000 kobo available and a verified NUBAN.
+-- Expected:
+--   - Session A acquires FOR UPDATE on wallet_balances and reserves 20,000,000.
+--   - Session B blocks until Session A commits, re-reads available=10,000,000,
+--     and FAILS with INSUFFICIENT_AVAILABLE_BALANCE.
+-- ============================================================================
 -- [SESSION A]
 -- BEGIN;
 -- SET LOCAL ROLE authenticated;
 -- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 -- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
--- SELECT public.request_withdrawal(20000000, '<verified_wallet_account_uuid>', 'ms-conc-wd-a');
--- -- Hold transaction open for 5 seconds while running Session B, then:
+-- SELECT public.request_withdrawal(20000000, '<verified_wallet_account_uuid>', 'ms-wd-a-01');
+-- -- Pause 5 seconds while Session B runs, then:
 -- COMMIT;
-
+--
 -- [SESSION B — execute while Session A is uncommitted]
 -- BEGIN;
 -- SET LOCAL ROLE authenticated;
 -- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 -- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
--- SELECT public.request_withdrawal(20000000, '<verified_wallet_account_uuid>', 'ms-conc-wd-b');
--- -- Must block until Session A commits, then fail with INSUFFICIENT_AVAILABLE_BALANCE.
+-- SELECT public.request_withdrawal(20000000, '<verified_wallet_account_uuid>', 'ms-wd-b-01');
+-- -- Must block on FOR UPDATE and fail with INSUFFICIENT_AVAILABLE_BALANCE after Session A commits.
 -- ROLLBACK;
 
--- ----------------------------------------------------------------------------
--- TEST 2: Concurrent Duplicate Deposit Settlement (Idempotency + FOR UPDATE)
--- Expected Outcome:
---   - Session A locks deposits row FOR UPDATE and settles once.
---   - Session B blocks until Session A commits, sees settlement_journal_entry_id IS NOT NULL,
---     and returns the exact same journal_entry_id without double-crediting.
--- ----------------------------------------------------------------------------
+-- ============================================================================
+-- SCENARIO 2: Duplicate Deposit Settlement (Concurrent Webhook + Verify Race)
+-- Precondition: Pending deposit 'PSK-STG-MS-01' for 10,000,000 kobo exists.
+-- Expected:
+--   - Session A locks deposits row FOR UPDATE and posts settlement journal entry.
+--   - Session B blocks until Session A commits, sees settlement_journal_entry_id
+--     IS NOT NULL, and returns the exact same journal_entry_id (0 double-credit).
+-- ============================================================================
+-- [SESSION A & SESSION B concurrently as service_role]
+-- BEGIN;
+-- SET LOCAL ROLE service_role;
+-- SELECT set_config('request.jwt.claim.role', 'service_role', true);
+-- SELECT public.settle_verified_deposit('PSK-STG-MS-01', 10000000, 'SRV-VER-MS-01', 'ms-dep-settle-01');
+-- COMMIT;
 
--- [SESSION A & SESSION B simultaneously as service_role]
--- SELECT public.settle_verified_deposit('PSK-STG-CONC-1', 10000000, 'VERIFY-CONC-1', 'dep-conc-settle-1');
+-- ============================================================================
+-- SCENARIO 3: Concurrent Wallet Reservations (Two Valid Requests Fitting Balance)
+-- Precondition: Investor 1 has 20,000,000 kobo available.
+-- Expected:
+--   - Session A reserves 8,000,000; Session B blocks then reserves 7,000,000.
+--   - Final state: available = 5,000,000, reserved = 15,000,000,
+--     total_customer_liability_kobo = 20,000,000, reconcile_wallet_balance = true.
+-- ============================================================================
+-- [SESSION A]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.request_withdrawal(8000000, '<verified_wallet_account_uuid>', 'ms-resv-a-01');
+-- COMMIT;
+--
+-- [SESSION B concurrently]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.request_withdrawal(7000000, '<verified_wallet_account_uuid>', 'ms-resv-b-01');
+-- COMMIT;
+
+-- ============================================================================
+-- SCENARIO 4: Withdrawal vs. Investment Subscription Race
+-- Precondition: Investor 1 has 10,000,000 kobo available.
+-- Expected:
+--   - Session A reserves 7,000,000 via request_withdrawal.
+--   - Session B attempts create_investment for 5,000,000 concurrently.
+--   - Session B blocks on wallets/wallet_balances FOR UPDATE, then FAILS with
+--     INSUFFICIENT_AVAILABLE_BALANCE once Session A commits.
+-- ============================================================================
+-- [SESSION A]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.request_withdrawal(7000000, '<verified_wallet_account_uuid>', 'ms-race-wd-01');
+-- COMMIT;
+--
+-- [SESSION B concurrently]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.create_investment('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 5000000, 'ms-race-inv-01');
+-- ROLLBACK;
+
+-- ============================================================================
+-- SCENARIO 5: Duplicate Payout Settlement Race (Two Workers Settling Same Withdrawal)
+-- Precondition: Approved & batched withdrawal <wd_uuid>.
+-- Expected:
+--   - Session A locks withdrawals row FOR UPDATE and settles once.
+--   - Session B blocks, observes settlement_journal_entry_id IS NOT NULL, and
+--     returns identical entry_id without double-debiting reserved_withdrawal_kobo.
+-- ============================================================================
+-- [SESSION A & SESSION B concurrently as service_role]
+-- BEGIN; SET LOCAL ROLE service_role;
+-- SELECT set_config('request.jwt.claim.role', 'service_role', true);
+-- SELECT public.settle_withdrawal('<wd_uuid>', 'NIP-MS-SETTLE-01', 'ms-wd-settle-01');
+-- COMMIT;
+
+-- ============================================================================
+-- SCENARIO 6: Competing Administrative Approvals (Two Finance Officers Racing)
+-- Precondition: Pending withdrawal <pending_wd_uuid>.
+-- Expected:
+--   - Session A (Finance Officer A) locks withdrawals FOR UPDATE and approves it.
+--   - Session B (Finance Officer B) blocks on FOR UPDATE, then FAILS with
+--     INVALID_WITHDRAWAL_STATE (Expected pending_approval, found approved) so
+--     only one approval audit trail & approver is ever recorded.
+-- ============================================================================
+-- [SESSION A — Finance Officer A]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.approve_withdrawal_four_eyes('<pending_wd_uuid>', 'Session A approval');
+-- COMMIT;
+--
+-- [SESSION B — Finance Officer B concurrently]
+-- BEGIN; SET LOCAL ROLE authenticated;
+-- SELECT set_config('request.jwt.claim.sub', '44444444-4444-4444-8444-444444444444', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+-- SELECT public.approve_withdrawal_four_eyes('<pending_wd_uuid>', 'Session B competing approval');
+-- ROLLBACK;
+
+-- ============================================================================
+-- POST-TEST RECONCILIATION VERIFICATION (Run after all 6 scenarios)
+-- ============================================================================
+-- SELECT * FROM public.reconcile_wallet_balance('<investor1_wallet_uuid>');
+-- Expected: is_reconciled = true AND cached_total_liability_kobo = ledger_total_liability_kobo

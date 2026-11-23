@@ -816,6 +816,528 @@ async function main() {
     return `Paused & archived plans both blocked rollover; active consented plan rolled 11,825,000 kobo; final recon delta=0`;
   });
 
+  // =========================================================================
+  // SUITE E: PHASE B.5 SECURITY & PUBLIC PLAN VISIBILITY HARDENING
+  // =========================================================================
+  console.log("\nSuite E: Phase B.5 Hardening (Migration 0013)");
+
+  await test("E. Phase B.5 Hardening", "SECURITY DEFINER caller checks block investors from reconcile_wallet_balance & fail_or_decline_withdrawal", async () => {
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv1, async () => {
+          await db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id]);
+        }),
+      /UNAUTHORIZED_RECONCILIATION/,
+      "Investor calling reconcile_wallet_balance",
+    );
+
+    const wdTestId = await runAs(db, "authenticated", USERS.inv1, async () => {
+      return (await db.query(`SELECT public.request_withdrawal(1000000, $1, 'wd-b5-sec-1') AS id`, [inv1BankId])).rows[0].id;
+    });
+
+    // Investor cannot decline or fail their own withdrawal via staff/service RPC
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv1, async () => {
+          await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Investor self-release attempt', 'declined', 'inv-self-decl')`, [wdTestId]);
+        }),
+      /UNAUTHORIZED/,
+      "Investor calling fail_or_decline_withdrawal(declined)",
+    );
+
+    // Finance officer cannot trigger 'failed' payout release without verified backend service_role callback
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.finA, async () => {
+          await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Unverified manual fail attempt', 'failed', 'fin-unver-fail')`, [wdTestId]);
+        }),
+      /VERIFIED_FAILURE_SERVICE_REQUIRED/,
+      "Finance officer calling fail_or_decline_withdrawal(failed)",
+    );
+
+    // Competing administrative approvals: FinA approves -> FinB competing approval MUST fail
+    await runAs(db, "authenticated", USERS.finA, async () => {
+      await db.query(`SELECT public.approve_withdrawal_four_eyes($1, 'FinA primary approval')`, [wdTestId]);
+    });
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.finB, async () => {
+          await db.query(`SELECT public.approve_withdrawal_four_eyes($1, 'FinB competing approval')`, [wdTestId]);
+        }),
+      /INVALID_WITHDRAWAL_STATE/,
+      "Competing administrative approval",
+    );
+
+    // Cleanly release via verified service_role failure callback
+    await runAs(db, "service_role", null, async () => {
+      await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Verified bank NIP failure callback', 'failed', 'srv-ver-fail-b5')`, [wdTestId]);
+    });
+
+    return "Investor bypass blocked; failed release restricted to verified service_role; competing admin approval rejected";
+  });
+
+  await test("E. Phase B.5 Hardening", "Anti-role-enumeration & public schema CREATE revocation + internal helper restriction", async () => {
+    const probed = await runAs(db, "authenticated", USERS.inv1, async () => {
+      const r = await db.query(`SELECT public.app_has_role($1, 'super_admin') AS is_sup`, [USERS.supA]);
+      return r.rows[0].is_sup;
+    });
+    assert(probed === false, "Investor must not be able to enumerate another user's super_admin role");
+
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv1, async () => {
+          await db.query(`SELECT public.internal_is_service_caller()`);
+        }),
+      /permission denied/i,
+      "Authenticated calling internal_is_service_caller",
+    );
+
+    const privs = (
+      await db.query(`
+        SELECT
+          has_schema_privilege('anon', 'public', 'CREATE') AS anon_create,
+          has_schema_privilege('authenticated', 'public', 'CREATE') AS auth_create
+      `)
+    ).rows[0];
+    assert(privs.anon_create === false && privs.auth_create === false, `Unexpected schema CREATE privs: ${JSON.stringify(privs)}`);
+
+    return "Cross-user role enumeration returns false; anon/authenticated have 0 CREATE privileges on public";
+  });
+
+  await test("E. Phase B.5 Hardening", "Public anonymous users see ONLY status = 'active' investment plans (paused & archived hidden)", async () => {
+    // Currently T-Bill is 'paused' and CP is 'archived' from Suite D; insert a fresh 'active' plan to verify contrast
+    await db.query(`
+      INSERT INTO public.investment_plans (
+        plan_code, slug, name, instrument_type, risk_band, tenor_days,
+        min_amount_kobo, illustrative_target_return_bps, allows_return_compounding, status, summary
+      ) VALUES (
+        'PLN-ACT-30', 'active-liquidity-30', 'Active Liquidity 30D (Staging)', 'money_market_fund',
+        'Conservative', 30, 5000000, 1200, false, 'active', 'Synthetic active staging plan.'
+      )
+    `);
+
+    const anonPlans = await runAs(db, "anon", null, async () => {
+      return (await db.query(`SELECT plan_code, status FROM public.investment_plans`)).rows;
+    });
+    assert(anonPlans.length === 1 && anonPlans[0].status === "active", `Anon should see ONLY 1 active plan, saw: ${JSON.stringify(anonPlans)}`);
+
+    // Investor 2 has no positions in paused/archived plans -> should see ONLY active plan
+    const inv2Plans = await runAs(db, "authenticated", USERS.inv2, async () => {
+      return (await db.query(`SELECT plan_code, status FROM public.investment_plans`)).rows;
+    });
+    assert(inv2Plans.length === 1 && inv2Plans[0].status === "active", `Investor 2 should see ONLY active plan, saw: ${JSON.stringify(inv2Plans)}`);
+
+    // Investor 1 holds historical positions in paused & archived plans -> retains read visibility for own holdings
+    const inv1Plans = await runAs(db, "authenticated", USERS.inv1, async () => {
+      return (await db.query(`SELECT plan_code, status FROM public.investment_plans`)).rows;
+    });
+    assert(inv1Plans.length === 3, `Investor 1 should see active + own historical positions (3), saw ${inv1Plans.length}`);
+
+    return "anon sees 1/1 active plan only; Investor 2 sees 1/1 active plan only; Investor 1 retains own historical holdings";
+  });
+
+  await test("E. Phase B.5 Hardening", "Final full-wallet reconciliation & total SECURITY DEFINER search_path audit post-Migration 0013", async () => {
+    const unpinned = await db.query(`
+      SELECT p.proname
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.prosecdef = true
+        AND (p.proconfig IS NULL OR NOT ('search_path=public, pg_temp' = ANY(p.proconfig)))
+    `);
+    assert(unpinned.rows.length === 0, "All SECURITY DEFINER functions must pin search_path=public, pg_temp");
+
+    const recon = await runAs(db, "service_role", null, async () => {
+      return (await db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])).rows[0];
+    });
+    assert(recon.is_reconciled === true, "Final reconciliation must pass with zero drift");
+    return "All SECURITY DEFINER functions pinned; final wallet reconciliation delta=0";
+  });
+
+  // =========================================================================
+  // SUITE F: FINAL SECURITY AUDIT — ADVERSARIAL IMPERSONATION & GUARDRAIL TESTS
+  // =========================================================================
+  console.log("\nSuite F: Final Security Audit — Adversarial Impersonation & Financial Guardrails (Migration 0014)");
+
+  await test("F. Adversarial Audit", "Investor, Finance Officer, Admin & Super Admin CANNOT impersonate service_role via spoofed JWT GUCs", async () => {
+    const wdSpoofId = await runAs(db, "authenticated", USERS.inv1, async () => {
+      return (await db.query(`SELECT public.request_withdrawal(1000000, $1, 'wd-adv-spoof-1') AS id`, [inv1BankId])).rows[0].id;
+    });
+
+    // Helper: attempt BOTH legacy request.jwt.claim.role AND modern PostgREST request.jwt.claims spoofing
+    const runSpoofed = async (userId, fn) => {
+      await db.exec("BEGIN");
+      try {
+        await db.exec("SET LOCAL ROLE authenticated");
+        await db.exec(`SELECT set_config('request.jwt.claim.sub', '${userId}', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claim.role', 'service_role', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true)`);
+        const out = await fn();
+        await db.exec("COMMIT");
+        return out;
+      } catch (err) {
+        await db.exec("ROLLBACK");
+        throw err;
+      }
+    };
+
+    // 1. Investor spoofing service_role GUCs
+    await expectError(
+      () => runSpoofed(USERS.inv1, () => db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])),
+      /UNAUTHORIZED_RECONCILIATION/,
+      "Investor GUC spoof on reconcile_wallet_balance",
+    );
+    await expectError(
+      () =>
+        runSpoofed(USERS.inv1, () =>
+          db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Investor spoofed fail', 'failed', 'adv-spoof-inv')`, [wdSpoofId]),
+        ),
+      /VERIFIED_FAILURE_SERVICE_REQUIRED/,
+      "Investor GUC spoof on fail_or_decline_withdrawal(failed)",
+    );
+    const spoofEnum = await runSpoofed(USERS.inv1, async () => {
+      return (await db.query(`SELECT public.app_has_role($1, 'super_admin') AS is_sup`, [USERS.supA])).rows[0].is_sup;
+    });
+    assert(spoofEnum === false, "Spoofed JWT GUCs must not bypass anti-role-enumeration");
+
+    // 2. Finance Officer spoofing service_role GUCs
+    await expectError(
+      () =>
+        runSpoofed(USERS.finA, () =>
+          db.query(`SELECT public.fail_or_decline_withdrawal($1, 'FinA spoofed fail', 'failed', 'adv-spoof-fin')`, [wdSpoofId]),
+        ),
+      /VERIFIED_FAILURE_SERVICE_REQUIRED/,
+      "Finance Officer GUC spoof on fail_or_decline_withdrawal(failed)",
+    );
+
+    // 3. Admin spoofing service_role GUCs
+    await expectError(
+      () => runSpoofed(USERS.adm, () => db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])),
+      /UNAUTHORIZED_RECONCILIATION/,
+      "Admin GUC spoof on reconcile_wallet_balance",
+    );
+
+    // 4. Super Admin spoofing service_role GUCs
+    await expectError(
+      () =>
+        runSpoofed(USERS.supA, () =>
+          db.query(`SELECT public.fail_or_decline_withdrawal($1, 'SuperAdmin spoofed fail', 'failed', 'adv-spoof-sup')`, [wdSpoofId]),
+        ),
+      /VERIFIED_FAILURE_SERVICE_REQUIRED/,
+      "Super Admin GUC spoof on fail_or_decline_withdrawal(failed)",
+    );
+
+    // Cleanly decline the pending withdrawal as independent FinA
+    await runAs(db, "authenticated", USERS.finA, async () => {
+      await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Cleanup after spoof test', 'declined', 'adv-spoof-clean')`, [wdSpoofId]);
+    });
+
+    return "All 4 roles (investor, finance_officer, admin, super_admin) blocked from GUC service_role impersonation";
+  });
+
+  await test("F. Adversarial Audit", "Direct unprivileged DB session, bare/user-bound service_role, malformed JSON & reconciler isolation", async () => {
+    // Create unprivileged direct role to verify direct DB session impersonation fails
+    await db.exec(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'adv_direct_user') THEN
+          CREATE ROLE adv_direct_user NOLOGIN;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator_sim') THEN
+          CREATE ROLE authenticator_sim NOLOGIN;
+        END IF;
+      END $$;
+      GRANT USAGE ON SCHEMA public TO adv_direct_user, authenticator_sim;
+    `);
+
+    // 1. Direct unprivileged session attempting settle_verified_deposit & internal_post_journal_entry with spoofed GUCs
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE adv_direct_user");
+          await db.exec(`SELECT set_config('request.jwt.claim.role', 'service_role', true)`);
+          await db.exec(`SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true)`);
+          await db.query(`SELECT public.settle_verified_deposit('PSK-FAKE', 1000000, 'FAKE-REF', 'adv-direct-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /permission denied/i,
+      "Direct unprivileged user calling settle_verified_deposit",
+    );
+
+    // 2. Direct authenticator role without SET ROLE service_role cannot execute privileged RPCs
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE authenticator_sim");
+          await db.exec(`SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true)`);
+          await db.query(`SELECT public.settle_withdrawal('00000000-0000-4000-8000-000000000001', 'NIP-FAKE', 'adv-auth-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /permission denied/i,
+      "Direct authenticator session calling settle_withdrawal",
+    );
+
+    // 3. service_role WITH a user sub claim MUST be rejected by internal_assert_service_caller()
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE service_role");
+          await db.exec(`SELECT set_config('request.jwt.claim.role', 'service_role', true)`);
+          await db.exec(`SELECT set_config('request.jwt.claim.sub', '${USERS.inv1}', true)`);
+          await db.query(`SELECT public.settle_verified_deposit('PSK-SUB-FAIL', 1000000, 'VERIFY-SUB', 'adv-sub-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /UNAUTHORIZED_SERVICE_CALL/,
+      "service_role with user sub claim",
+    );
+
+    // 4. Bare SET LOCAL ROLE service_role WITHOUT JWT role claim MUST be rejected
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE service_role");
+          await db.exec(`SELECT set_config('request.jwt.claim.role', '', true)`);
+          await db.exec(`SELECT set_config('request.jwt.claim.sub', '', true)`);
+          await db.exec(`SELECT set_config('request.jwt.claims', '', true)`);
+          await db.query(`SELECT public.settle_verified_deposit('PSK-BARE-FAIL', 1000000, 'VERIFY-BARE', 'adv-bare-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /UNAUTHORIZED_SERVICE_CALL/,
+      "Bare service_role without JWT role claim",
+    );
+
+    // 5. Malformed request.jwt.claims JSON MUST fail closed
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE service_role");
+          await db.exec(`SELECT set_config('request.jwt.claim.role', 'service_role', true)`);
+          await db.exec(`SELECT set_config('request.jwt.claims', '{not-valid-json', true)`);
+          await db.query(`SELECT public.settle_verified_deposit('PSK-BADJSON', 1000000, 'VERIFY-JSON', 'adv-json-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /UNAUTHORIZED_SERVICE_CALL/,
+      "Malformed JSON in request.jwt.claims",
+    );
+
+    // 6. Legitimate Supabase PostgREST v10+ JSON request.jwt.claims = {"role":"service_role"} (no legacy claim) SUCCEEDS
+    const pgRestV10Recon = await (async () => {
+      await db.exec("BEGIN");
+      try {
+        await db.exec("SET LOCAL ROLE service_role");
+        await db.exec(`SELECT set_config('request.jwt.claim.role', '', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claim.sub', '', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claims', '{"role":"service_role","iss":"supabase"}', true)`);
+        const r = (await db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])).rows[0];
+        await db.exec("COMMIT");
+        return r;
+      } catch (e) {
+        await db.exec("ROLLBACK");
+        throw e;
+      }
+    })();
+    assert(pgRestV10Recon.is_reconciled === true, "PostgREST v10+ JSON service_role claim must succeed on reconcile_wallet_balance");
+
+    // 7. silver_spoon_reconciler can reconcile, but CANNOT execute settlement or failure-release RPCs
+    const reconcilerOk = await (async () => {
+      await db.exec("BEGIN");
+      try {
+        await db.exec("SET LOCAL ROLE silver_spoon_reconciler");
+        await db.exec(`SELECT set_config('request.jwt.claim.role', '', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claim.sub', '', true)`);
+        await db.exec(`SELECT set_config('request.jwt.claims', '', true)`);
+        const r = (await db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])).rows[0];
+        await db.exec("COMMIT");
+        return r;
+      } catch (e) {
+        await db.exec("ROLLBACK");
+        throw e;
+      }
+    })();
+    assert(reconcilerOk.is_reconciled === true, "silver_spoon_reconciler must succeed on reconcile_wallet_balance");
+
+    await expectError(
+      async () => {
+        await db.exec("BEGIN");
+        try {
+          await db.exec("SET LOCAL ROLE silver_spoon_reconciler");
+          await db.query(`SELECT public.settle_verified_deposit('PSK-REC', 1000000, 'VERIFY-REC', 'adv-rec-1')`);
+          await db.exec("COMMIT");
+        } catch (e) {
+          await db.exec("ROLLBACK");
+          throw e;
+        }
+      },
+      /permission denied/i,
+      "silver_spoon_reconciler calling settle_verified_deposit",
+    );
+
+    return "Direct unprivileged sessions, bare/sub-bound/malformed service_role blocked; PostgREST v10+ JSON & reconciler isolation verified";
+  });
+
+  await test("F. Adversarial Audit", "Zero anon RPC execute grants + internal_* primitives blocked even for service_role", async () => {
+    const anonExec = (
+      await db.query(`
+        SELECT p.proname
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND has_function_privilege('anon', p.oid, 'EXECUTE')
+      `)
+    ).rows;
+    assert(anonExec.length === 0, `anon must have 0 EXECUTE grants on public functions, found: ${anonExec.map((r) => r.proname).join(", ")}`);
+
+    const authInternal = (
+      await db.query(`
+        SELECT p.proname
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND (p.proname LIKE 'internal_%' OR p.proname IN ('settle_verified_deposit', 'settle_withdrawal'))
+          AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      `)
+    ).rows;
+    assert(authInternal.length === 0, `authenticated must have 0 EXECUTE grants on internal/settlement RPCs: ${authInternal.map((r) => r.proname).join(", ")}`);
+
+    // Even service_role must NOT be able to invoke low-level internal_post_journal_entry directly
+    await expectError(
+      () =>
+        runAs(db, "service_role", null, async () => {
+          await db.query(
+            `SELECT public.internal_post_journal_entry('srv-raw-je', 'manual', 'RAW-1', 'Direct internal call', NULL, '[]'::jsonb)`,
+          );
+        }),
+      /permission denied/i,
+      "service_role calling internal_post_journal_entry directly",
+    );
+
+    const srvPrimitives = (
+      await db.query(`
+        SELECT p.proname
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname IN (
+            'internal_is_service_caller',
+            'internal_is_reconciler_caller',
+            'internal_assert_service_caller',
+            'internal_get_open_period_id',
+            'internal_get_system_account_id',
+            'internal_post_journal_entry',
+            'internal_write_audit_log'
+          )
+          AND has_function_privilege('service_role', p.oid, 'EXECUTE')
+      `)
+    ).rows;
+    assert(srvPrimitives.length === 0, `service_role must not have direct EXECUTE on internal primitives: ${srvPrimitives.map((r) => r.proname).join(", ")}`);
+
+    return "0 anon RPC grants; 0 authenticated internal/settlement grants; 0 service_role direct internal_* primitive grants";
+  });
+
+  await test("F. Adversarial Audit", "Financial guardrails: block declining approved withdrawal, cross-user deposit key leak, expired approvals, daily cap & empty idempotency key", async () => {
+    // 1. In-flight approved withdrawal CANNOT be declined by staff (prevents double-spend)
+    const wdInflight = await runAs(db, "authenticated", USERS.inv1, async () => {
+      return (await db.query(`SELECT public.request_withdrawal(1000000, $1, 'wd-adv-inflight') AS id`, [inv1BankId])).rows[0].id;
+    });
+    await runAs(db, "authenticated", USERS.finA, async () => {
+      await db.query(`SELECT public.approve_withdrawal_four_eyes($1, 'Approved before decline test')`, [wdInflight]);
+    });
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.finB, async () => {
+          await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Attempted decline after approval', 'declined', 'decl-after-app')`, [wdInflight]);
+        }),
+      /INVALID_DECLINE_STATE/,
+      "Declining already-approved withdrawal",
+    );
+    // Cleanly release via verified service_role failure callback
+    await runAs(db, "service_role", null, async () => {
+      await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Verified bank failure callback', 'failed', 'srv-fail-inflight')`, [wdInflight]);
+    });
+
+    // 2. Cross-user deposit idempotency key collision MUST NOT leak Investor 1's transaction UUID to Investor 2
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv2, async () => {
+          await db.query(
+            `SELECT public.initialize_deposit(2000000, 'paystack_checkout_card', 'PSK-INV2-COLLIDE', 'dep-init-001')`,
+          );
+        }),
+      /duplicate key|unique/i,
+      "Cross-user deposit idempotency collision",
+    );
+
+    // 3. Expired admin_action CANNOT be approved
+    const wdExpired = await runAs(db, "authenticated", USERS.inv1, async () => {
+      return (await db.query(`SELECT public.request_withdrawal(1000000, $1, 'wd-adv-expired') AS id`, [inv1BankId])).rows[0].id;
+    });
+    const actId = (await db.query(`SELECT four_eyes_action_id FROM public.withdrawals WHERE id = $1`, [wdExpired])).rows[0].four_eyes_action_id;
+    await db.query(`UPDATE public.admin_actions SET expires_at = now() - interval '1 minute' WHERE id = $1`, [actId]);
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.finA, async () => {
+          await db.query(`SELECT public.approve_withdrawal_four_eyes($1, 'Late approval attempt')`, [wdExpired]);
+        }),
+      /ACTION_EXPIRED/,
+      "Approving expired withdrawal action",
+    );
+    await runAs(db, "authenticated", USERS.finA, async () => {
+      await db.query(`SELECT public.fail_or_decline_withdrawal($1, 'Expired action cleanup decline', 'declined', 'decl-exp-clean')`, [wdExpired]);
+    });
+
+    // 4. Empty idempotency key rejected upfront
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv1, async () => {
+          await db.query(`SELECT public.request_withdrawal(1000000, $1, '   ')`, [inv1BankId]);
+        }),
+      /INVALID_IDEMPOTENCY_KEY/,
+      "Blank idempotency key in request_withdrawal",
+    );
+
+    // 5. Daily Tier 2 withdrawal limit enforced (Tier 2 cap = 500,000,000 kobo)
+    await expectError(
+      () =>
+        runAs(db, "authenticated", USERS.inv1, async () => {
+          await db.query(`SELECT public.request_withdrawal(500000001, $1, 'wd-over-daily-cap')`, [inv1BankId]);
+        }),
+      /DAILY_WITHDRAWAL_LIMIT_EXCEEDED/,
+      "Withdrawal exceeding Tier 2 daily limit",
+    );
+
+    // 6. Final reconciliation check across Investor 1 wallet after all adversarial tests
+    const finalRecon = await runAs(db, "service_role", null, async () => {
+      return (await db.query(`SELECT * FROM public.reconcile_wallet_balance($1)`, [w1.id])).rows[0];
+    });
+    assert(finalRecon.is_reconciled === true, "Wallet must reconcile cleanly after all adversarial tests");
+
+    return "Approved-withdrawal decline blocked; cross-user idempotency leak closed; expired approval, blank key & daily cap rejected; recon delta=0";
+  });
+
   // Catalog Inventory Metrics (exact ground-truth from PostgreSQL pg_catalog)
   const inv = await db.query(`
     SELECT
@@ -824,6 +1346,7 @@ async function main() {
       (SELECT COUNT(*)::int FROM pg_constraint con JOIN pg_namespace n ON n.oid=con.connamespace WHERE n.nspname='public') AS constraints_count,
       (SELECT COUNT(*)::int FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal) AS triggers_count,
       (SELECT COUNT(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public') AS functions_count,
+      (SELECT COUNT(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prosecdef = true) AS security_definer_count,
       (SELECT COUNT(*)::int FROM pg_policies WHERE schemaname='public') AS rls_policies_count
   `);
   console.log("\n=== PG_CATALOG INVENTORY ===");

@@ -1,70 +1,83 @@
-# SILVER SPOON — Phase B Automated Database Test Report
+# SILVER SPOON — Phase B / B.5 Automated Database Test Report
 
-**Test Runner**: `npm run test:db` (`scripts/db/run-phase-b-tests.mjs`)  
-**Execution Engine**: Real embedded PostgreSQL (`@electric-sql/pglite`) initialized with `supabase/tests/harness_supabase_shim.sql`, all 12 Phase B migrations (`supabase/migrations/*.sql`), and synthetic test fixtures (`supabase/seed/staging_synthetic_seed.sql`).  
-**Remote Staging Status**: Not yet executed against a remote Supabase staging host (no dedicated staging project credentials present in workspace). Supplementary multi-session concurrency script prepared at `supabase/tests/staging_multisession_concurrency.sql`.
-
----
-
-## 1. Execution Summary
-
-- **Total Automated Tests Executed**: **20**
-- **Passed**: **20**
-- **Failed**: **0**
-- **Schema Assertions**: **40/40** tables created with `ENABLE` + `FORCE ROW LEVEL SECURITY`; **42/42** `SECURITY DEFINER` functions pin `search_path = public, pg_temp`; **62** table-specific RLS policies active.
+**Local Automated Runner**: `npm run test:db` (`scripts/db/run-phase-b-tests.mjs`)  
+**Local Execution Engine**: Embedded PostgreSQL (`@electric-sql/pglite`) running `supabase/tests/harness_supabase_shim.sql`, all 13 migrations (`supabase/migrations/20261123000100`–`20261123001300`), and `supabase/seed/staging_synthetic_seed.sql`.
 
 ---
 
-## 2. Detailed Test Results by Suite
+## 1. Execution Scope Distinction (Local vs. Remote Staging)
+
+| Test Category | Execution Status | Result | Evidence / Next Action |
+| :--- | :---: | :---: | :--- |
+| **1. Local PGlite Verification (Suites A–E)** | **EXECUTED** | **24 / 24 PASSED (0 Failed)** | Executed via `npm run test:db` across all 13 migrations |
+| **2. Remote Supabase Staging Deployment** | **NOT EXECUTED** | Pending staging provisioning | Requires dedicated staging project ref + `supabase db push` |
+| **3. Remote PostgreSQL Security Tests** | **NOT EXECUTED** | Pending remote deployment | Run security verification SQL in `docs/phase-b-deployment-guide.md` Section 5.2 |
+| **4. Remote Multi-Session Concurrency Tests** | **NOT EXECUTED** | Pending remote deployment | Run all 6 two-session scenarios in `supabase/tests/staging_multisession_concurrency.sql` |
+
+---
+
+## 2. Executed Local PGlite Results (24 / 24 Passed)
 
 ### Suite A: Financial Integrity (6 / 6 Passed)
 
 | # | Test Case | Status | Verified Result |
 | :-: | :--- | :---: | :--- |
-| A1 | Balanced journal transaction updates `wallet_balances` & generated `total_customer_liability_kobo` accurately | **PASS** | `available_kobo = 50,000,000`, `reserved_withdrawal_kobo = 0`, `invested_principal_kobo = 0`, `total_customer_liability_kobo = 50,000,000` |
-| A2 | Commit-time deferred constraint trigger rejects unbalanced journal postings | **PASS** | Transaction aborted at `COMMIT` with `UNBALANCED_JOURNAL_ENTRY` |
-| A3 | Duplicate idempotency deposit settlement returns original entry without double-crediting | **PASS** | Replayed `idempotency_key` returned exact `journal_entry_id` with zero balance inflation |
-| A4 | Posted journal entries & lines are strictly immutable (`UPDATE` & `DELETE` blocked) | **PASS** | Both `UPDATE journal_entries` and `DELETE journal_lines` raised `IMMUTABLE_RECORD` |
-| A5 | Four-eyes reversal posts mirrored entry, blocks self-approval, and blocks double-reversal | **PASS** | FinA self-approval raised `FOUR_EYES_VIOLATION`; FinB approval posted mirrored reversal restoring balance to `50,000,000`; second reversal request raised `ALREADY_REVERSED` |
-| A6 | Cached-vs-journal reconciliation passes cleanly and flags drift on simulated tamper | **PASS** | `reconcile_wallet_balance` returned `is_reconciled = true`; simulated out-of-band `+100` kobo tamper returned `is_reconciled = false` and inserted a `critical` `LEDGER_RECONCILIATION_DRIFT` compliance event |
+| A1 | Balanced journal transaction updates `wallet_balances` & generated `total_customer_liability_kobo` | **PASS** | `available_kobo = 50,000,000`, `reserved = 0`, `invested = 0`, `total_customer_liability_kobo = 50,000,000` |
+| A2 | Commit-time deferred constraint trigger rejects unbalanced journal postings | **PASS** | Aborted at `COMMIT` with `UNBALANCED_JOURNAL_ENTRY` |
+| A3 | Duplicate idempotency deposit settlement returns original entry without double-crediting | **PASS** | Exact `journal_entry_id` returned; balance unchanged at `50,000,000` |
+| A4 | Posted journal entries & lines are strictly immutable (`UPDATE` & `DELETE` blocked) | **PASS** | Raised `IMMUTABLE_RECORD` on both `UPDATE` and `DELETE` |
+| A5 | Four-eyes reversal posts mirrored entry, blocks self-approval, blocks double-reversal | **PASS** | FinA self-approval rejected (`FOUR_EYES_VIOLATION`); FinB reversed cleanly; repeat request rejected (`ALREADY_REVERSED`) |
+| A6 | Cached-vs-journal reconciliation passes cleanly and flags drift on simulated tamper | **PASS** | Clean match (`is_reconciled = true`); simulated `+100` kobo tamper returned `is_reconciled = false` and raised a `critical` `LEDGER_RECONCILIATION_DRIFT` compliance event |
 
 ### Suite B: Database Security, RLS, Grants & Anti-Escalation (6 / 6 Passed)
 
 | # | Test Case | Status | Verified Result |
 | :-: | :--- | :---: | :--- |
-| B1 | Investor account isolation (Investor 1 vs Investor 2 + ledger tables) | **PASS** | 0 rows returned when Investor 1 queried Investor 2's `profiles`, `wallet_balances`, or `journal_entries` |
-| B2 | Direct browser-side financial DML (`INSERT`/`UPDATE`/`DELETE`) blocked by least-privilege grants | **PASS** | `UPDATE wallet_balances` and `INSERT user_roles` as `authenticated` failed with `permission denied` |
-| B3 | Unauthorized administrative access & role escalation attempts rejected inside `SECURITY DEFINER` RPCs | **PASS** | Investor escalation rejected (`UNAUTHORIZED_ROLE_ESCALATION`); SuperAdmin A self-escalation rejected (`SELF_ESCALATION_BLOCKED`); SuperAdmin A self-approval rejected (`FOUR_EYES_VIOLATION`); independent SuperAdmin B approval succeeded |
-| B4 | Unauthorized RPC execution blocked for `anon` and `authenticated` on privileged/service-only functions | **PASS** | `authenticated` call to `settle_verified_deposit` and `anon` call to `request_withdrawal` rejected with `permission denied` |
-| B5 | Unauthorized KYC metadata access blocked | **PASS** | Investor 2 and Finance Officer saw 0 rows of Investor 1's `kyc_records`; Compliance Officer saw 1 row; Finance Officer attempt to call `review_kyc_record` rejected (`UNAUTHORIZED_ROLE`) |
-| B6 | All `SECURITY DEFINER` functions in `public` schema pin `search_path = public, pg_temp` | **PASS** | **42/42** `SECURITY DEFINER` functions verified via `pg_proc.proconfig` |
+| B1 | Investor account isolation (Investor 1 vs Investor 2 + ledger tables) | **PASS** | 0 cross-account `profiles`, `wallet_balances`, or `journal_entries` rows visible |
+| B2 | Direct browser-side financial DML (`INSERT`/`UPDATE`/`DELETE`) blocked by `REVOKE ALL` | **PASS** | `UPDATE wallet_balances` and `INSERT user_roles` rejected (`permission denied`) |
+| B3 | Unauthorized administrative access & role escalation rejected inside `SECURITY DEFINER` RPCs | **PASS** | Investor escalation (`UNAUTHORIZED_ROLE_ESCALATION`), self-escalation (`SELF_ESCALATION_BLOCKED`), and self-approval (`FOUR_EYES_VIOLATION`) all blocked; independent dual `super_admin` grant succeeded |
+| B4 | Unauthorized RPC execution blocked for `anon` & `authenticated` on service-only functions | **PASS** | `settle_verified_deposit` as `authenticated` and `request_withdrawal` as `anon` rejected (`permission denied`) |
+| B5 | Unauthorized KYC metadata access blocked | **PASS** | Investor 2 and Finance Officer saw 0 rows; Compliance Officer saw 1 row; Finance Officer review rejected (`UNAUTHORIZED_ROLE`) |
+| B6 | All `SECURITY DEFINER` functions pin `search_path = public, pg_temp` | **PASS** | **43 / 43** `SECURITY DEFINER` functions verified via `pg_proc.proconfig` |
 
-### Suite C: Concurrency & Race Guardrails (4 / 4 Passed)
+### Suite C: Concurrency & Race Guardrails — Local Serialized Verification (4 / 4 Passed)
 
-*Execution Scope Note*: Embedded PGlite runs a single PostgreSQL backend process, so Suite C executes deterministic row-locking, atomic reservation, idempotency, and overspend checks sequentially inside real PostgreSQL transactions. True multi-connection blocking (`Session A` holding `FOR UPDATE` while `Session B` waits) must additionally be executed on the dedicated remote staging PostgreSQL instance using `supabase/tests/staging_multisession_concurrency.sql`.
+*Note*: Embedded PGlite runs a single PostgreSQL backend process; true two-session lock blocking (`Session A` holding `FOR UPDATE` while `Session B` waits) must be executed remotely on Supabase staging via `supabase/tests/staging_multisession_concurrency.sql`.
 
 | # | Test Case | Status | Verified Result |
 | :-: | :--- | :---: | :--- |
-| C1 | Overlapping withdrawal requests exceeding available balance reject overspend atomically | **PASS** | First `30,000,000` kobo reservation succeeded (`available=20,000,000`, `reserved=30,000,000`, `total_liability=50,000,000`); second `25,000,000` request rejected (`INSUFFICIENT_AVAILABLE_BALANCE`) |
-| C2 | Duplicate settlement requests are idempotent and never double-debit reserved balance | **PASS** | Four-eyes batch self-approval blocked (`FOUR_EYES_VIOLATION`); independent batch approval + repeated `settle_withdrawal` returned identical entry ID and cleared `reserved_withdrawal_kobo` to `0` once |
-| C3 | Failed payout releases reserved funds atomically and idempotently back to available balance | **PASS** | Repeated `fail_or_decline_withdrawal` returned identical release entry ID and restored `available_kobo = 20,000,000`, `reserved_withdrawal_kobo = 0` |
-| C4 | Competing balance reservation (withdrawal vs investment subscription) prevents double-spend | **PASS** | After reserving `16,000,000` of `20,000,000` available, a competing `5,000,000` `create_investment` call was rejected (`INSUFFICIENT_AVAILABLE_BALANCE`) |
+| C1 | Overlapping withdrawals exceeding available balance reject overspend atomically | **PASS** | First `30,000,000` reserved (`total_liability` invariant at `50,000,000`); second `25,000,000` rejected (`INSUFFICIENT_AVAILABLE_BALANCE`) |
+| C2 | Duplicate settlement requests are idempotent and never double-debit reserved balance | **PASS** | Batch self-approval rejected; duplicate `settle_withdrawal` returned identical entry ID; reserved cleared to `0` once |
+| C3 | Failed payout releases reserved funds atomically & idempotently back to available balance | **PASS** | Duplicate release returned identical entry ID; `available_kobo` restored to `20,000,000` |
+| C4 | Competing balance reservation (withdrawal vs investment subscription) prevents double-spend | **PASS** | `16,000,000` reserved blocked competing `5,000,000` investment (`INSUFFICIENT_AVAILABLE_BALANCE`) |
 
 ### Suite D: Business Rules (4 / 4 Passed)
 
 | # | Test Case | Status | Verified Result |
 | :-: | :--- | :---: | :--- |
-| D1 | Universal four-eyes gates (withdrawal settlement, bank-detail change, manual ledger adjustment, platform settings) | **PASS** | Unapproved withdrawal settlement rejected (`FOUR_EYES_APPROVAL_REQUIRED`); self-approval rejected across bank change, manual ledger adjustment, and `platform_settings`; independent second approver succeeded |
-| D2 | Default rollover is `principal_only`; return compounding requires BOTH plan eligibility AND explicit consent | **PASS** | Compounding rejected on non-eligible plan (`COMPOUNDING_NOT_PERMITTED`) and on eligible plan without consent (`EXPLICIT_CONSENT_REQUIRED`); default subscription stored `rollover_mode = 'principal_only'` |
-| D3 | Configurable `tax_rules` resolve effective dates & exemptions dynamically + `tax_applications` immutability | **PASS** | Payout as of `2026-03-15` applied `1000 bps` (`100,000` tax); payout as of `2026-09-15` applied `750 bps` (`75,000` tax); FGN T-Bill resolved `0 bps` (`is_exempt = true`); financial tamper and second remittance overwrite rejected (`IMMUTABLE_RECORD`); self-approval of realized payout rejected (`FOUR_EYES_VIOLATION`) |
-| D4 | Rollover into `paused` and `archived` plans strictly blocked; active consented compounding succeeds + final recon = 0 | **PASS** | Maturing positions under both `paused` and `archived` plans produced `settled_to_available_plan_unavailable`, `child_investment_id = NULL`, and investor notification; active consented CP position rolled `11,825,000` kobo; final `reconcile_wallet_balance` returned `is_reconciled = true` |
+| D1 | Universal four-eyes gates (withdrawal settlement, bank-detail change, manual adjustment, platform settings) | **PASS** | Unapproved settlement blocked (`FOUR_EYES_APPROVAL_REQUIRED`); self-approval blocked across bank change, manual ledger adjustment, and `platform_settings` |
+| D2 | Default rollover is `principal_only`; return compounding requires plan eligibility AND explicit consent | **PASS** | Non-eligible plan (`COMPOUNDING_NOT_PERMITTED`) and missing consent (`EXPLICIT_CONSENT_REQUIRED`) rejected; default stored `principal_only` |
+| D3 | Configurable `tax_rules` resolve effective dates & exemptions dynamically + `tax_applications` immutable | **PASS** | `2026-03` resolved `10.00%`; `2026-09` resolved `7.50%`; FGN T-Bill resolved `0%` exempt; tamper & double-remittance blocked (`IMMUTABLE_RECORD`) |
+| D4 | Rollover into `paused` and `archived` plans strictly blocked; active consented compounding succeeds | **PASS** | Both `paused` and `archived` settled to `available_kobo` (`child_investment_id = NULL`, disposition `settled_to_available_plan_unavailable`); active consented plan rolled `11,825,000` kobo |
+
+### Suite E: Phase B.5 Security Review & Public Plan Visibility Hardening (4 / 4 Passed)
+
+| # | Test Case | Status | Verified Result |
+| :-: | :--- | :---: | :--- |
+| E1 | `SECURITY DEFINER` caller checks block investors from `reconcile_wallet_balance` & `fail_or_decline_withdrawal`; `'failed'` restricted to `service_role`; competing admin approvals rejected | **PASS** | Investor calls rejected (`UNAUTHORIZED_RECONCILIATION` / `UNAUTHORIZED`); Finance Officer `'failed'` call rejected (`VERIFIED_FAILURE_SERVICE_REQUIRED`); competing FinB approval rejected (`INVALID_WITHDRAWAL_STATE`) |
+| E2 | Anti-role-enumeration, internal helper restriction & `public` schema `CREATE` revocation | **PASS** | `app_has_role(supA, 'super_admin')` as Investor 1 returned `false`; `internal_is_service_caller()` denied (`permission denied`); `anon` & `authenticated` have `CREATE = false` on `public` |
+| E3 | Public anonymous users see ONLY `status = 'active'` investment plans | **PASS** | `anon` saw `1/1` active plan (0 paused, 0 archived); Investor 2 (no holdings) saw `1/1` active plan; Investor 1 (existing holdings) retained read visibility of own historical plan metadata |
+| E4 | Final end-to-end wallet reconciliation & full `SECURITY DEFINER` `search_path` audit post-Migration 0013 | **PASS** | `43/43` `SECURITY DEFINER` functions pinned; `reconcile_wallet_balance` returned `is_reconciled = true` (0 kobo drift) |
 
 ---
 
-## 3. Failures Encountered During Initial Runs & Resolutions
+## 3. Remote Multi-Session Concurrency Tests (Prepared — Pending Dedicated Staging Host)
 
-| Run | Failure Observed | Root Cause | Resolution | Verification |
-| :-: | :--- | :--- | :--- | :---: |
-| Run 1 | Migration 0001 failed: `extension "pgcrypto" is not available` | Minimal embedded PostgreSQL lacks optional contrib `pgcrypto`; PG 15+ provides core `gen_random_uuid()`. | Conditionally enabled `pgcrypto` only when present in `pg_available_extensions`. | **Passed** |
-| Run 2 | Seed deposit commit failed: `record "new" has no field "journal_entry_id"` | Shared deferred trigger `assert_journal_entry_balanced()` used a static `CASE` referencing `NEW.journal_entry_id` when fired on `journal_entries`. | Replaced with `COALESCE(NULLIF(to_jsonb(NEW) ->> 'journal_entry_id', '')::UUID, (to_jsonb(NEW) ->> 'id')::UUID)`. | **Passed** |
-| Run 3 | Expanded suite (20 tests) | — | Zero failures; 20/20 passed. | **Passed** |
+Once a dedicated non-production Supabase staging project is provisioned and migrated, all 6 scenarios in `supabase/tests/staging_multisession_concurrency.sql` must be executed across two concurrent `psql` sessions and recorded here:
+
+1. Concurrent withdrawals (`Session A` vs `Session B` competing on `FOR UPDATE`) — **Pending remote staging**
+2. Duplicate deposit settlement (concurrent webhook + verify race) — **Pending remote staging**
+3. Concurrent wallet reservations (two valid reservations fitting available balance) — **Pending remote staging**
+4. Withdrawal vs. investment subscription race — **Pending remote staging**
+5. Duplicate payout settlement race — **Pending remote staging**
+6. Competing administrative approvals (`Finance Officer A` vs `Finance Officer B` racing on `approve_withdrawal_four_eyes`) — **Pending remote staging**
