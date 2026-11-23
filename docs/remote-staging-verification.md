@@ -1,25 +1,26 @@
 # SILVER SPOON — Phase B.5 Remote Staging Verification Workbook (Supabase SQL Editor)
 
 **Verification Phase**: Phase B.5 — Remote Non-Production Database Verification  
-**Target Environment**: Connected SILVER SPOON Supabase Staging Project (PostgreSQL 15+)  
+**Target Environment**: Connected SILVER SPOON Supabase Staging Project (PostgreSQL `17.12`, `server_version_num = 170012`)  
 **Active Frontend Provider**: `VITE_DATA_PROVIDER=mock` (unchanged; Phase C not started)  
 **Migration Baseline**: Migrations `20261123000100` through `20261123001400` (14 frozen forward-only migrations — **unmodified**)  
 **Safety Guarantee**: Every SQL query in this document is **100% READ-ONLY (`SELECT` only)**. Zero migrations are created or modified, zero database objects are altered, and zero secret keys, service-role keys, or passwords are requested or referenced.
 
-> **Honesty & Evidence Boundary (Catalog Checks vs. Runtime Tests)**
-> - **Confirmed Remotely (Catalog Checks Only)**:
->   - **Check 0 (Migration History)**: All **14 migrations (`20261123000100`–`20261123001400`)** confirmed present (`PASS`).
->   - **Check 1 (40 Tables)**: `40, 40, [], {}` confirmed (`PASS`).
->   - **Check 2 (Forced RLS & Ownership)**: `40, 40, 40, 0, {postgres}` confirmed (`PASS`).
->   - **Check 3A (RLS Policy Summary)**: `63, 40, 0, 0` confirmed (**3A PASS**; **Query 3B detailed policy review still PENDING**).
->   - **Check 4 (Function Inventory)**: `49, 45, [], {rls_auto_enable}, []` confirmed — **48 SILVER SPOON application functions** (`44` `SECURITY DEFINER` + `4` invoker triggers) + **1 legitimate PostgreSQL/Supabase infrastructure event-trigger function** (`public.rls_auto_enable`, invoked by enabled event trigger `ensure_rls`, owner `postgres`, `SECURITY DEFINER`, `search_path = pg_catalog`) = **49 total observed** (`PASS`).
->   - **Check 5A (`SECURITY DEFINER` Pinning Summary)**: `49, 45, 44, 1, 0, {postgres}` confirmed (**5A PASS**; **Query 5B detailed security configuration output still PENDING**).
->   - **Check 6 (7 Internal Primitives Lockdown)**: All `7/7` `internal_*` primitives returned `false` for `PUBLIC`, `anon`, `authenticated`, `service_role`, `silver_spoon_treasury_worker`, and `silver_spoon_reconciler` (`PASS`).
->   - **Check 9 (Partial RPC Investigation)**: Intentional `authenticated EXECUTE = true` grants on `public.fail_or_decline_withdrawal` and `public.reconcile_wallet_balance` (Migration `0012`) accepted subject to full remote definition/ACL confirmation (**Queries 9A–9D & 10B still PENDING**).
-> - **Not Yet Executed Remotely**:
->   - **Remaining Catalog Checks**: Query `0A`, Query `3B` (detailed RLS policy review), Query `5B` (function security configuration), Query `7A`/`7B` (detailed `anon`/`PUBLIC` function ACL listing), Query `8A`/`8B` (schema `public` `CREATE` & default ACLs), Query `9A`–`9D` (full RPC/table/role graph), Query `10A`–`10D` (safeguards & live definition check), Query `11A`–`11C` (triggers/indexes/constraints inventory).
->   - **Runtime & Concurrency Tests (0% Executed)**: Synthetic GoTrue user seeding, live PostgREST JWT tests (`P1`–`P20`), actual multi-session PostgreSQL row-locking tests (`C1`–`C8`), and synthetic wallet & journal runtime tests have **NOT** been executed remotely.
-> - **Governance Lock**: No Migration `0015` created; Migrations `0001`–`0014` unmodified; `VITE_DATA_PROVIDER=mock` intact; **Phase C remains unauthorized**.
+> **Honesty & Evidence Boundary (Catalog Checks vs. Runtime Tests & Verbatim Raw Output Availability)**
+> - **Confirmed Remotely with Verbatim Raw Outputs Archived in This Document (Catalog Checks Only)**:
+>   - **Check 0 (`0A` Environment & `0B` Migration History)**: Query `0A` archived verbatim (`postgres,postgres,postgres,17.12,170012,"pg_stat_statements@1.11 (extensions), pgcrypto@1.3 (extensions), plpgsql@1.0 (pg_catalog), uuid-ossp@1.1 (extensions)"` — PostgreSQL `17.12 >= 15` **PASS**; extensions isolated in `extensions` / `pg_catalog`); all **14 migrations (`20261123000100`–`20261123001400`)** confirmed present (`PASS`).
+>   - **Check 1 (40 Tables)**: `40, 40, [], {}` archived verbatim (`PASS`).
+>   - **Check 2 (Forced RLS & Ownership)**: `40, 40, 40, 0, {postgres}` archived verbatim (`PASS`).
+>   - **Check 3A (RLS Policy Summary)**: `63, 40, 0, 0` archived verbatim (`PASS`).
+>   - **Check 4 (Function Inventory)**: `49, 45, [], {rls_auto_enable}, []` archived verbatim — **48 SILVER SPOON application functions** (`44` `SECURITY DEFINER` + `4` invoker triggers) + **1 legitimate PostgreSQL/Supabase infrastructure event-trigger function** (`public.rls_auto_enable`, invoked by enabled event trigger `ensure_rls`, owner `postgres`, `SECURITY DEFINER`, `search_path = pg_catalog`) = **49 total observed** (`PASS`).
+>   - **Check 5A (`SECURITY DEFINER` Pinning Summary)**: `49, 45, 44, 1, 0, {postgres}` archived verbatim (`PASS`).
+>   - **Check 6 (7 Internal Primitives Lockdown)**: All `7/7` `internal_*` primitives archived verbatim as `false,false,false,false,false,false` across `PUBLIC`, `anon`, `authenticated`, `service_role`, `silver_spoon_treasury_worker`, and `silver_spoon_reconciler` (`PASS`).
+> - **Operator-Reviewed Remote Catalog Queries (External Review Recorded — Verbatim Raw CSV Transcripts Not Archived in Repository)**:
+>   - The operator confirmed that raw Supabase SQL Editor outputs for **Queries `3B`, `3C`, `5B`, `7A`, `7B`, `8A`, `8B`, `9A`–`9D`, `10A`–`10D`, and `11A`–`11C`** were executed remotely and reviewed in the operator's external review session. Their reconciled statuses are recorded in Section 2.1 below (`3B` preliminary PASS pending helper-function/runtime validation; `3C`, `5B`, `7A`/`7B`, `8A`, `10A` PASS; `8B` PASS WITH OBSERVATION on Supabase-managed default ACLs; `9A`–`9D` assessed including intentional dual-audience RPC grants; `10B`/`10C` PASS at catalog/function inspection level; `10D` PASS WITH RUNTIME LIMITATIONS due to zero populated wallets/journals; `11A`–`11C` PASS at catalog level).
+>   - **Raw Evidence Limitation**: Exact verbatim row-by-row raw outputs for Queries `3B`, `3C`, `5B`, `7A`, `7B`, `8A`, `8B`, `9A`–`9D`, `10A`–`10D`, and `11A`–`11C` are **not present in the repository files or this session transcript**. No rows have been reconstructed, interpolated, or fabricated; attach verbatim CSV exports before final Phase B.5 audit sign-off.
+> - **Still Pending (Not Executed)**:
+>   - **Runtime & Concurrency Suites (0% Executed)**: (1) Synthetic persona seeding, (2) Live PostgREST JWT security tests (`P1`–`P20`), (3) Multi-session row-locking tests (`C1`–`C8`), and (4) Synthetic wallet & journal runtime tests have **NOT** been executed remotely.
+> - **Governance Lock & Readiness Statement**: No Migration `0015` created; Migrations `0001`–`0014` unmodified; Paystack remains disabled; `VITE_DATA_PROVIDER=mock` intact; **Phase C remains unauthorized; staging is NOT production-ready**.
 
 ---
 
@@ -58,54 +59,58 @@ Read-only security investigation of Migrations `0001`–`0014` confirmed that `a
 
 ### 2.1 Remote Catalog & Security Configuration Checks
 
-| Check | Verification Area | Authoritative Expected Baseline (Post-M0014 + Hosted) | Current Remote Status | Recorded Evidence / Remaining Action |
+| Check | Verification Area | Authoritative Expected Baseline (Post-M0014 + Hosted) | Current Remote Status | Recorded Evidence, Limitations & Remaining Action |
 | :---: | :--- | :--- | :---: | :--- |
-| **0** | Remote Migration History (`0001`–`0014`) | 14 migrations (`20261123000100`..`20261123001400`) | **PASS** | Operator confirmed all 14 versions present (Query `0A` PG version snapshot still pending) |
-| **1** | 40 Expected Public Tables | Exact 40 tables (`0` missing, `0` unexpected) | **PASS** | Observed: `40, 40, [], {}` |
-| **2** | `ENABLE` + `FORCE ROW LEVEL SECURITY` | `40 / 40` tables with `ENABLE` + `FORCE RLS`, safe owner | **PASS** | Observed: `40, 40, 40, 0, {postgres}` |
-| **3** | 63 Expected RLS Policies | `63` `SELECT`-only policies across `40` tables + verified qualifiers | **NEEDS INVESTIGATION** | **3A PASS** (`63, 40, 0, 0`); **Query 3B detailed RLS policy review PENDING** |
-| **4** | Function Inventory (48 App + 1 Infra = 49) | `48` app (`44` `SECURITY DEFINER` + `4` triggers) + `1` infra (`rls_auto_enable`) | **PASS** | Observed: `49, 45, [], {rls_auto_enable}, []`; `rls_auto_enable` verified as `ensure_rls` infrastructure event-trigger function (`pg_catalog`, `postgres`) |
-| **5** | `SECURITY DEFINER` Ownership & `search_path` | `44/44` app `SECURITY DEFINER` pinned to `public, pg_temp` + `rls_auto_enable` pinned to `pg_catalog` | **NEEDS INVESTIGATION** | **5A PASS** (`49, 45, 44, 1, 0, {postgres}`); **Query 5B function security configuration output PENDING** |
-| **6** | Internal Primitive Privilege Lockdown | All `7` `internal_*` primitives = `false` across all 6 non-owner roles | **PASS** | Observed: `7/7` rows `false,false,false,false,false,false` |
-| **7** | Zero `anon` & `PUBLIC` Function Grants | `0 / 48` app functions executable by `anon` or `PUBLIC` (plus verify `rls_auto_enable` ACL) | **NEEDS INVESTIGATION** | **Query 7A & Query 7B detailed function ACL listing PENDING** |
-| **8** | Schema `public` `CREATE` Restrictions | `CREATE = false` for `PUBLIC`, `anon`, `authenticated`, workers | **NEEDS INVESTIGATION** | **Query 8A & Query 8B PENDING** |
-| **9** | Financial RPC Role Permissions & Role Graph | `34` `authenticated`, `5` `treasury_worker`, `1` `reconciler`; intentional dual grants accepted; `0` client DML grants; safe `pg_auth_members` | **NEEDS INVESTIGATION** | `fail_or_decline_withdrawal` & `reconcile_wallet_balance` grants accepted as intentional; **full Queries 9A–9D PENDING** |
-| **10** | Withdrawal, Deposit & Ledger Safeguards | Paystack disabled (no DVA); 9 system accounts; open period; M0014 live function guards; `0` JWT metadata reads; `0` unbalanced journals; `0` drift | **NEEDS INVESTIGATION** | **Queries 10A–10D PENDING** (also confirms live remote bodies of both dual-audience RPCs) |
-| **11** | Triggers, Indexes, Constraints & Object Inventory | `20` enums, `40` tables, `149` indexes, `24` triggers, `48` app + `1` infra functions, `63` policies, `2` custom roles, `pg_constraint` breakdown | **NEEDS INVESTIGATION** | **Queries 11A–11C inventory reconciliation PENDING** |
+| **0** | Remote Migration History (`0001`–`0014`) & PG Environment (`0A`, `0B`) | 14 migrations (`20261123000100`..`20261123001400`) + PG `>= 15` | **PASS** | `0A` verbatim archived: PostgreSQL `17.12` (`170012 >= 150000`), `pg_stat_statements@1.11`, `pgcrypto@1.3`, `uuid-ossp@1.1` in `extensions`, `plpgsql@1.0` in `pg_catalog`; `0B` all 14 migration versions confirmed present |
+| **1** | 40 Expected Public Tables | Exact 40 tables (`0` missing, `0` unexpected) | **PASS** | Verbatim output archived: `40, 40, [], {}` |
+| **2** | `ENABLE` + `FORCE ROW LEVEL SECURITY` | `40 / 40` tables with `ENABLE` + `FORCE RLS`, safe owner | **PASS** | Verbatim output archived (`2A`): `40, 40, 40, 0, {postgres}` |
+| **3** | 63 Expected RLS Policies (`3A`, `3B`, `3C`) | `63` `SELECT`-only policies across `40` tables + verified qualifiers + `0` uncovered tables | **PRELIMINARY PASS (`3A`/`3C` PASS; `3B` PRELIMINARY PASS)** | `3A` verbatim output archived (`63, 40, 0, 0`). `3B` operator-reviewed (**preliminary PASS** pending helper-function and runtime JWT validation); `3C` operator-reviewed (**PASS**). *Raw CSV transcripts for `3B`/`3C` not archived in repo.* |
+| **4** | Function Inventory (`48` App + `1` Infra = `49`) | `48` app (`44` `SECURITY DEFINER` + `4` triggers) + `1` infra (`rls_auto_enable`) | **PASS** | Verbatim output archived: `49, 45, [], {rls_auto_enable}, []`; `rls_auto_enable` verified separately as `ensure_rls` infrastructure event-trigger function (`pg_catalog`, `postgres`) |
+| **5** | `SECURITY DEFINER` Ownership & `search_path` (`5A`, `5B`) | `44/44` app `SECURITY DEFINER` pinned to `public, pg_temp` + `rls_auto_enable` pinned to `pg_catalog` | **PASS** | `5A` verbatim output archived (`49, 45, 44, 1, 0, {postgres}`). `5B` operator-reviewed (**PASS**). *Raw CSV transcript for `5B` not archived in repo.* |
+| **6** | Internal Primitive Privilege Lockdown | All `7` `internal_*` primitives = `false` across all 6 non-owner roles | **PASS** | Verbatim output archived: `7/7` rows `false,false,false,false,false,false` |
+| **7** | Zero `anon` & `PUBLIC` Function Grants (`7A`, `7B`) | `0 / 48` app functions executable by `anon` or `PUBLIC` + full 49-row ACL check | **PASS** | `7A` & `7B` operator-reviewed (**PASS**). *Raw CSV transcripts for `7A`/`7B` not archived in repo.* |
+| **8** | Schema `public` `CREATE` Restrictions & Default ACLs (`8A`, `8B`) | `CREATE = false` for `PUBLIC`, `anon`, `authenticated`, workers; default ACL review | **PASS WITH OBSERVATION (`8A` PASS; `8B` PASS WITH OBSERVATION)** | `8A` operator-reviewed (**PASS**). `8B` operator-reviewed (**PASS WITH OBSERVATION** concerning Supabase-managed default ACLs on future `public` objects — future migrations `0015+` must continue including explicit `REVOKE ALL` statements). *Raw CSV transcripts for `8A`/`8B` not archived in repo.* |
+| **9** | Financial RPC Role Permissions, Table Grants & Role Graph (`9A`–`9D`) | `34` `authenticated`, `5` `treasury_worker`, `1` `reconciler`; intentional dual grants accepted; `0` client DML grants; safe `pg_auth_members` | **ASSESSED / PASS (Catalog Level)** | `9A`–`9D` operator-reviewed and assessed, including intentional `authenticated EXECUTE = true` grants on `public.fail_or_decline_withdrawal` and `public.reconcile_wallet_balance` (Migration `0012`). *Raw CSV transcripts for `9A`–`9D` not archived in repo; runtime JWT enforcement pending Phase 3.* |
+| **10** | Withdrawal, Deposit & Ledger Safeguards (`10A`–`10D`) | Paystack disabled (no DVA); 9 system accounts; open period; M0014 live function guards; `0` JWT metadata reads; `0` unbalanced journals; `0` drift | **PASS WITH RUNTIME LIMITATIONS (`10A` PASS; `10B`/`10C` PASS Catalog; `10D` PASS WITH RUNTIME LIMITATIONS)** | `10A` operator-reviewed (**PASS**). `10B` & `10C` operator-reviewed (**PASS** at catalog/function inspection level). `10D` operator-reviewed (**PASS WITH RUNTIME LIMITATIONS**: no actual synthetic wallets or journal entries were populated in staging for live runtime verification). *Raw CSV transcripts for `10A`–`10D` not archived in repo.* |
+| **11** | Triggers, Indexes, Constraints & Object Inventory (`11A`–`11C`) | `20` enums, `40` tables, `149` indexes, `24` triggers, `48` app + `1` infra functions, `63` policies, `2` custom roles, `pg_constraint` breakdown | **PASS (Catalog Level)** | `11A`–`11C` operator-reviewed (**PASS** at catalog level). *Raw CSV transcripts for `11A`–`11C` not archived in repo.* |
 
-### 2.2 Remote Runtime & Concurrency Tests (Strictly Distinct from Catalog Checks)
+### 2.2 Remote Runtime & Concurrency Tests (Strictly Distinct from Catalog Checks — 0% Executed)
 
 | Runtime Test Suite | Scope | Current Remote Status |
 | :--- | :--- | :---: |
-| **Synthetic Persona Seeding** | Auth Admin API creation of 8 `.invalid` users + `staging_synthetic_seed.sql` | **NEEDS INVESTIGATION (NOT EXECUTED)** |
-| **Live PostgREST JWT Runtime Tests (`P1`–`P20`)** | Real GoTrue JWTs across `anon`, `investor` (with tampered `user_metadata`), `finance_officer`, `compliance_officer`, `admin`, `super_admin`, and server-only `service_role` | **NEEDS INVESTIGATION (NOT EXECUTED)** |
-| **Multi-Session Row-Locking Tests (`C1`–`C8`)** | Two independent `psql` connections testing `FOR UPDATE` / `FOR SHARE` blocking (`staging_multisession_concurrency.sql` + M0014 daily-cap & plan-lock races) | **NEEDS INVESTIGATION (NOT EXECUTED)** |
-| **Synthetic Wallet & Journal Runtime Tests** | End-to-end deposit → withdrawal → four-eyes approval/decline → settlement → immutability → `reconcile_wallet_balance` zero-drift check | **NEEDS INVESTIGATION (NOT EXECUTED)** |
+| **1. Synthetic Persona Seeding** | Auth Admin API creation of 8 `.invalid` users + `staging_synthetic_seed.sql` | **PENDING (NOT EXECUTED)** |
+| **2. Live PostgREST JWT Security Tests (`P1`–`P20`)** | Real GoTrue JWTs across `anon`, `investor` (with tampered `user_metadata`), `finance_officer`, `compliance_officer`, `admin`, `super_admin`, and server-only `service_role` (also completes runtime validation for `3B` helper-function & RLS enforcement and `9A`–`9D` dual-audience RPCs) | **PENDING (NOT EXECUTED)** |
+| **3. Multi-Session Row-Locking Tests (`C1`–`C8`)** | Two independent `psql` connections testing `FOR UPDATE` / `FOR SHARE` blocking (`staging_multisession_concurrency.sql` + M0014 daily-cap & plan-lock races) | **PENDING (NOT EXECUTED)** |
+| **4. Synthetic Wallet & Journal Runtime Tests** | End-to-end deposit → withdrawal → four-eyes approval/decline → settlement → immutability → live non-empty `reconcile_wallet_balance` zero-drift verification (resolves `10D` runtime limitation) | **PENDING (NOT EXECUTED)** |
 
-### 2.3 Preserved Raw Remote Query Outputs Captured So Far
+### 2.3 Preserved Raw Remote Query Outputs (Verbatim Outputs Available in Repository / Session)
 
 ```csv
--- Query 1 (PASS)
+-- Query 0A (PASS — verbatim)
+database_name,effective_user,connected_user,pg_version,pg_version_num,relevant_extensions
+postgres,postgres,postgres,17.12,170012,"pg_stat_statements@1.11 (extensions), pgcrypto@1.3 (extensions), plpgsql@1.0 (pg_catalog), uuid-ossp@1.1 (extensions)"
+
+-- Query 1 (PASS — verbatim)
 actual_table_count,expected_table_count,missing_tables,unexpected_tables
 40,40,[],{}
 
--- Query 2A (PASS)
+-- Query 2A (PASS — verbatim)
 total_public_tables,rls_enabled_count,rls_forced_count,unsafe_owner_count,table_owners
 40,40,40,0,{postgres}
 
--- Query 3A (PASS — Query 3B pending)
+-- Query 3A (PASS — verbatim)
 total_rls_policies,tables_covered,non_select_policies,jwt_metadata_policies
 63,40,0,0
 
--- Query 4 (PASS — 48 app + 1 infrastructure event_trigger function rls_auto_enable = 49 total)
+-- Query 4 (PASS — verbatim; 48 app + 1 infrastructure event_trigger function rls_auto_enable = 49 total)
 actual_app_function_count,actual_secdef_count,missing_functions,unexpected_app_functions,secdef_mismatches
 49,45,[],{rls_auto_enable},[]
 
--- Query 5A (PASS — Query 5B pending)
+-- Query 5A (PASS — verbatim)
 total_app_functions,secdef_count,secdef_pinned_count,any_unpinned_count,unsafe_owner_count,distinct_owners
 49,45,44,1,0,{postgres}
 
--- Query 6 (PASS)
+-- Query 6 (PASS — verbatim)
 internal_primitive,pub_exec,anon_exec,auth_exec,service_role_exec,treasury_worker_exec,reconciler_exec
 internal_assert_service_caller,false,false,false,false,false,false
 internal_get_open_period_id,false,false,false,false,false,false
@@ -116,16 +121,19 @@ internal_post_journal_entry,false,false,false,false,false,false
 internal_write_audit_log,false,false,false,false,false,false
 ```
 
+> **Verbatim Raw Output Availability Limitation (`Queries 3B, 3C, 5B, 7A, 7B, 8A, 8B, 9A–9D, 10A–10D, 11A–11C`)**:
+> The operator confirmed that these queries were executed in the remote Supabase SQL Editor and reviewed externally, and supplied the reconciled statuses recorded in Section 2.1. However, their exact verbatim CSV/row outputs are **not stored in this repository or present in this session transcript**. In accordance with strict audit integrity rules, **no missing rows have been fabricated, reconstructed, or guessed**. Before final Phase B.5 audit sign-off, attach the verbatim CSV exports to the permanent staging verification archive.
+
 ---
 
 ## 3. Manual Read-Only SQL Verification Queries (Supabase SQL Editor)
 
-Run each remaining query block independently in the **Supabase SQL Editor** against your staging project. All queries are strictly read-only (`SELECT` only). Paste the query results back to update each remaining check from `NEEDS INVESTIGATION` to `PASS` or `FAIL`.
+All Phase 1 catalog queries (`0A` through `11C`) have been executed remotely (with verbatim outputs archived for `0A`, `1`, `2A`, `3A`, `4`, `5A`, and `6`). Re-run any query block below independently in the **Supabase SQL Editor** if needed to archive additional verbatim CSV exports. All queries are strictly read-only (`SELECT` only).
 
 ---
 
-### Check 0 — Optional Audit Snapshot: Remote Migration History & PostgreSQL Environment
-**Current Status**: **PASS** *(operator confirmed `20261123000100`–`20261123001400`; run to record PostgreSQL version & extension placement for the audit log)*
+### Check 0 — Audit Snapshot: Remote Migration History & PostgreSQL Environment
+**Current Status**: **PASS** *(Query `0A` verbatim archived: PostgreSQL `17.12` [`pg_version_num = 170012 >= 150000`], `pg_stat_statements@1.11 (extensions)`, `pgcrypto@1.3 (extensions)`, `plpgsql@1.0 (pg_catalog)`, `uuid-ossp@1.1 (extensions)`; Query `0B` all 14 migration versions `20261123000100`–`20261123001400` confirmed present)*
 
 ```sql
 -- QUERY 0A: PostgreSQL version, session role, and installed extensions
@@ -253,7 +261,7 @@ ORDER BY c.relname;
 ---
 
 ### Check 3 — Verify All 63 Expected RLS Policies Exist & Enforce Intended Visibility
-**Current Status**: **NEEDS INVESTIGATION** *(Query 3A **PASS**: `63, 40, 0, 0`; Query 3B detailed policy review **PENDING**)*
+**Current Status**: **PRELIMINARY PASS** *(Query `3A` **PASS** verbatim: `63, 40, 0, 0`; Query `3B` operator-reviewed **PRELIMINARY PASS** pending helper-function and runtime validation; Query `3C` operator-reviewed **PASS**; verbatim raw CSVs for `3B`/`3C` not archived in repository)*
 
 ```sql
 -- QUERY 3A: Policy summary across public schema
@@ -402,7 +410,7 @@ SELECT
 ---
 
 ### Check 5 — Verify All 44 Application `SECURITY DEFINER` Functions Pin `search_path = public, pg_temp` & Safe Ownership
-**Current Status**: **NEEDS INVESTIGATION** *(Query 5A **PASS**: `49, 45, 44, 1, 0, {postgres}` — 44/44 app `SECURITY DEFINER` + 4/4 trigger functions pinned to `public, pg_temp`, 1 infrastructure function `rls_auto_enable` pinned to `pg_catalog`; Query 5B raw confirmation **PENDING**)*
+**Current Status**: **PASS** *(Query `5A` **PASS** verbatim: `49, 45, 44, 1, 0, {postgres}` — 44/44 app `SECURITY DEFINER` + 4/4 trigger functions pinned to `public, pg_temp`, 1 infrastructure function `rls_auto_enable` pinned to `pg_catalog`; Query `5B` operator-reviewed **PASS**; verbatim raw CSV for `5B` not archived in repository)*
 
 ```sql
 -- QUERY 5A: Summary of search_path pinning and ownership across all public non-extension functions
@@ -487,7 +495,7 @@ ORDER BY p.proname;
 ---
 
 ### Check 7 — Verify Anonymous (`anon`) & `PUBLIC` Have Zero `EXECUTE` Privileges Across All 48 Application Functions
-**Current Status**: **NEEDS INVESTIGATION** *(Query 7A & Query 7B detailed function ACL listing **PENDING**)*
+**Current Status**: **PASS** *(Queries `7A` & `7B` operator-reviewed **PASS**; verbatim raw CSVs not archived in repository)*
 
 ```sql
 -- QUERY 7A: Count of application functions (48) vs. infrastructure event-trigger (1) executable by anon or PUBLIC
@@ -523,7 +531,7 @@ ORDER BY classification, p.proname;
 ---
 
 ### Check 8 — Verify Schema `public` `CREATE` Privileges Are Restricted
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **PASS WITH OBSERVATION** *(Query `8A` operator-reviewed **PASS**; Query `8B` operator-reviewed **PASS WITH OBSERVATION** concerning Supabase-managed default ACLs on future `public` objects — future migrations `0015+` must retain explicit `REVOKE ALL` statements; verbatim raw CSVs not archived in repository)*
 
 ```sql
 -- QUERY 8A: Schema public USAGE & CREATE privileges for PUBLIC and application/worker roles
@@ -565,7 +573,7 @@ ORDER BY granting_role, object_type;
 ---
 
 ### Check 9 — Verify Financial RPC Permissions, Client Table Grants & Role Separation Graph
-**Current Status**: **NEEDS INVESTIGATION** *(Intentional `authenticated EXECUTE = true` grants on `fail_or_decline_withdrawal` & `reconcile_wallet_balance` accepted per Section 1.2; full Queries 9A–9D **PENDING**)*
+**Current Status**: **ASSESSED / PASS (Catalog Level)** *(Queries `9A`–`9D` operator-reviewed and assessed, including accepted intentional `authenticated EXECUTE = true` grants on `fail_or_decline_withdrawal` & `reconcile_wallet_balance` per Section 1.2; verbatim raw CSVs not archived in repository; runtime JWT verification pending Phase 3)*
 
 ```sql
 -- QUERY 9A: Full EXECUTE matrix across the 48 application functions (excluding infrastructure event-trigger rls_auto_enable)
@@ -666,7 +674,7 @@ ORDER BY parent.rolname, member.rolname;
 ---
 
 ### Check 10 — Verify Withdrawal, Deposit & Ledger Safeguards Are Present
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **PASS WITH RUNTIME LIMITATIONS** *(Query `10A` operator-reviewed **PASS**; Queries `10B` & `10C` operator-reviewed **PASS** at catalog/function inspection level; Query `10D` operator-reviewed **PASS WITH RUNTIME LIMITATIONS** because no actual wallets or journal entries were populated in staging for live runtime verification; verbatim raw CSVs not archived in repository)*
 
 ```sql
 -- QUERY 10A: Payment providers (Paystack disabled, DVAs excluded), system ledger accounts, open periods & withdrawal settings
@@ -780,7 +788,7 @@ SELECT
 ---
 
 ### Check 11 — Verify Triggers, Indexes, Constraints, Enums & Custom Roles Match Local Audit Inventory
-**Current Status**: **NEEDS INVESTIGATION** *(Queries 11A–11C **PENDING**)*
+**Current Status**: **PASS (Catalog Level)** *(Queries `11A`–`11C` operator-reviewed **PASS** at catalog level; verbatim raw CSVs not archived in repository)*
 
 ```sql
 -- QUERY 11A: Complete pg_catalog object inventory separating 48 app functions + 1 infra event-trigger function = 49 total
@@ -838,19 +846,17 @@ ORDER BY con.contype;
 
 ---
 
-## 4. Remaining Uncompleted Verification Checks & Next Recommended Sequence
+## 4. Remaining Uncompleted Verification Checks, Documentation Limitations & Next Sequence
 
-1. **Complete Remaining Read-Only Catalog Checks** (in Supabase SQL Editor):
-   - **Query 3B** — Detailed high-sensitivity RLS policy qualifiers (`investment_plans`, `kyc_*`, `journal_*`, `withdrawal_batches`, `payment_*`, `audit_logs`, `user_roles`).
-   - **Query 5B** — Confirm raw security config of `rls_auto_enable` and `0` unpinned SILVER SPOON functions.
-   - **Query 7A & 7B** — Confirm `0` `anon`/`PUBLIC` `EXECUTE` grants on all 48 app functions and record full 49-row ACL table.
-   - **Query 8A & 8B** — Confirm `public` schema `CREATE = false` and inspect `pg_default_acl`.
-   - **Query 9A–9D** — Confirm complete RPC grant matrix, `0` client table DML grants, `anon` `SELECT` on `investment_plans` only, and `pg_auth_members` graph.
-   - **Query 10A–10D** — Confirm Paystack disabled, 9 system accounts, open period, Migration `0014` live guardrails in `pg_proc.prosrc` (including `fail_or_decline_withdrawal`), `0` JWT metadata reads, `0` unbalanced journals, and `0` wallet drift.
-   - **Query 11A–11C** — Complete object inventory reconciliation (`enums`, `indexes`, `constraints`, `triggers`, `roles`).
-2. **Execute Runtime & Concurrency Validation (`docs/staging-post-deployment-verification.md`)**:
-   - Synthetic Auth Admin API seeding + `staging_synthetic_seed.sql`.
-   - Live HTTPS PostgREST JWT authorization tests (`P1`–`P20`).
-   - Two-session PostgreSQL multi-connection locking tests (`C1`–`C8`).
-   - Synthetic wallet & journal runtime tests, immutability checks, and zero-drift reconciliation.
-3. **Hold Phase C Gate**: Keep `VITE_DATA_PROVIDER=mock` and do **not** begin Phase C until both catalog verification and runtime/concurrency tests pass completely.
+1. **Remaining Catalog Evidence & Governance Items**:
+   - **Archive Verbatim Raw CSV Exports** (documentation hygiene): Queries `3B`, `3C`, `5B`, `7A`, `7B`, `8A`, `8B`, `9A`–`9D`, `10A`–`10D`, and `11A`–`11C` were reviewed externally by the operator; attach their verbatim CSV exports to the staging audit record so every catalog check has immutable local evidence alongside Queries `0A`, `1`, `2A`, `3A`, `4`, `5A`, and `6`.
+   - **Monitor Observation (`Query 8B`)**: Supabase-managed default ACLs on future `public` objects mean every future forward-only migration (`0015+`) must continue executing explicit `REVOKE ALL` statements immediately after creating any table, sequence, or function.
+   - **Close Preliminary / Runtime-Limited Catalog Items**:
+     - **Query `3B`** remains **PRELIMINARY PASS** until helper-function and live PostgREST JWT tests (`P1`–`P20`) verify effective row filtering at runtime.
+     - **Query `10D`** remains **PASS WITH RUNTIME LIMITATIONS** until synthetic wallets and journal entries exist and pass live end-to-end reconciliation.
+2. **Execute All 4 Pending Runtime & Concurrency Suites (`docs/staging-post-deployment-verification.md`)**:
+   - **Suite 1 — Synthetic Persona Seeding**: Auth Admin API creation of 8 `.invalid` users + `staging_synthetic_seed.sql`.
+   - **Suite 2 — Live PostgREST JWT Security Tests (`P1`–`P20`)**: Verify real GoTrue JWT enforcement across all 5 roles, `anon`, tampered `user_metadata`, and server-only `service_role`.
+   - **Suite 3 — Multi-Session Locking Tests (`C1`–`C8`)**: Two independent `psql` connections proving `FOR UPDATE` / `FOR SHARE` serialization under contention.
+   - **Suite 4 — Synthetic Wallet & Journal Runtime Tests**: Full deposit, withdrawal, four-eyes approval/decline, settlement, immutability rejection (`IMMUTABLE_RECORD`), non-empty `reconcile_wallet_balance` zero-drift verification, and backup verification.
+3. **Hold Phase C Gate (Not Production-Ready)**: Keep `VITE_DATA_PROVIDER=mock`, Paystack disabled, Migrations `0001`–`0014` frozen, and do **not** begin Phase C authentication integration or claim production readiness until verbatim audit archival and all 4 runtime/concurrency suites pass completely.
