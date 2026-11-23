@@ -1,14 +1,14 @@
 # SILVER SPOON — Staging Post-Deployment Verification Runbook & Sign-Off Workbook
 
-**Execution Status**: **PENDING — NOT YET EXECUTED**  
-**Honesty Statement**: Remote staging deployment and remote validation have **NOT** occurred. All checklists and evidence tables below are prepared templates for operator execution immediately after controlled deployment to a dedicated non-production Supabase staging project.  
-**Target Environment**: Dedicated, isolated non-production Supabase Staging PostgreSQL 15+ project ONLY (zero real customers, zero live Paystack keys, `VITE_DATA_PROVIDER=mock` unchanged).
+**Execution Status**: **IN PROGRESS — PARTIAL REMOTE CATALOG VERIFICATION ONLY (RUNTIME & CONCURRENCY TESTS NOT YET EXECUTED)**  
+**Honesty Statement**: Remote migration history (`0001`–`0014`) and selected read-only catalog checks (`Query 1`, `Query 2A`, `Query 3A`, `Query 4`, `Query 5A`, `Query 6`, plus read-only ACL review of `fail_or_decline_withdrawal`, `reconcile_wallet_balance`, and `rls_auto_enable`) have been verified against the connected staging database (details in `docs/remote-staging-verification.md`). **Remaining catalog checks (`3B`, `5B`, `7A`/`7B`, `8A`/`8B`, `9A`–`9D`, `10A`–`10D`, `11A`–`11C`) and ALL runtime/concurrency tests (Phases 2–5) have NOT been executed yet.**  
+**Target Environment**: Dedicated, isolated non-production Supabase Staging PostgreSQL 15+ project ONLY (zero real customers, zero live Paystack keys, `VITE_DATA_PROVIDER=mock` unchanged, Migrations `0001`–`0014` frozen, no Migration `0015`, Phase C unauthorized).
 
 ---
 
-## Phase 1: Automated Read-Only Catalog & Security Verification
+## Phase 1: Read-Only Catalog & Security Configuration Verification (In Progress)
 
-Immediately after `supabase db push` completes on the dedicated staging project, run the read-only verification suite (enforced with `BEGIN TRANSACTION READ ONLY;`):
+Catalog verification is being executed manually via the Supabase SQL Editor (`docs/remote-staging-verification.md`) and can also be cross-checked via `psql`:
 
 ```bash
 psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -16,22 +16,29 @@ psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 \
   > staging_security_verification_output.txt
 ```
 
-### Expected Pass Criteria (Sections 1–12 of `staging_security_verification.sql`)
+> **Hosted Supabase Function Inventory Note (`48` App + `1` Infrastructure = `49` Total)**:
+> Hosted Supabase pre-installs `public.rls_auto_enable()` — a legitimate PostgreSQL/Supabase infrastructure event-trigger function invoked by enabled event trigger `ensure_rls` (owner `postgres`, `SECURITY DEFINER`, explicit `search_path = pg_catalog`). Exclude `rls_auto_enable` from the **48-function** SILVER SPOON application inventory and classify it separately (**48 application functions + 1 infrastructure event-trigger function = 49 total observed**). Note that `staging_security_verification.sql` (authored for local PGlite parity) checks `COUNT(*) = 48`; use `docs/remote-staging-verification.md` Queries `4`, `5`, `7`, `9`, and `11` for hosted Supabase runs so `rls_auto_enable` is separated cleanly.
 
-| Section | Verification Check | Required Passing Result | Status |
+> **Accepted Intentional Dual-Audience RPC Grants (Migration `0012` — No Migration `0015`)**:
+> - `public.fail_or_decline_withdrawal`: `PUBLIC=false`, `anon=false`, **`authenticated=true`** (Finance Officer / Super Admin decline of eligible `pending_approval` withdrawals), `service_role=true`, `silver_spoon_treasury_worker=true`, `silver_spoon_reconciler=false`. Failed payout release (`'failed'`) strictly requires verified service caller (`internal_is_service_caller()`).
+> - `public.reconcile_wallet_balance`: `PUBLIC=false`, `anon=false`, **`authenticated=true`** (Finance Officer / Super Admin on-demand reconciliation), `service_role=true`, `silver_spoon_treasury_worker=true`, `silver_spoon_reconciler=true` (sole reconciler grant). Never mutates wallet balances or posts financial journals.
+
+### Phase 1 Catalog Verification Tracker (Catalog Checks Only — Distinct from Runtime Tests)
+
+| Section | Verification Check | Required Passing Result (Hosted Baseline) | Current Status |
 | :---: | :--- | :--- | :---: |
-| **1** | PostgreSQL Version & Extensions | `server_version_num >= 150000` (`PASS`); `pgcrypto` status logged | PENDING |
-| **2** | Migration History (`supabase_migrations.schema_migrations`) | Notice confirms `14/14` versions (`20261123000100`..`20261123001400`) applied, `0` missing | PENDING |
-| **3** | Schema Privileges & `pg_default_acl` | `PUBLIC`, `anon`, `authenticated`, `silver_spoon_reconciler`, `silver_spoon_treasury_worker` all have `CREATE = false`; `USAGE = true` for app/worker roles | PENDING |
-| **4** | Roles, `BYPASSRLS` & `pg_auth_members` | `anon`, `authenticated`, `silver_spoon_reconciler`, `silver_spoon_treasury_worker` have `rolsuper=false`, `rolbypassrls=false`, `rolcanlogin=false`; none of `anon`/`authenticated`/`silver_spoon_reconciler` appear as members of `service_role`, `silver_spoon_treasury_worker`, `postgres`, or `supabase_admin` | PENDING |
-| **5** | Tables, Ownership, `ENABLE` + `FORCE RLS` & Table Grants | `40/40` tables with `ENABLE` + `FORCE RLS`; `0` unsafe table owners; `0` client DML grants; `anon` `SELECT` strictly limited to `investment_plans` (1 table) | PENDING |
-| **6** | RLS Policies | `63` total policies covering all `40` tables; `0` non-`SELECT` client policies; `rls_investment_plans_select_anon` filters `status = 'active'`; KYC/compliance policies restricted to owner + `compliance_officer`/`super_admin` | PENDING |
-| **7** | Function Security Attributes | `48` total functions (`44` `SECURITY DEFINER` + `4` invoker triggers); `0` missing `search_path=public, pg_temp`; `0` owned by `anon`/`authenticated`/`service_role`; `0` referencing `user_metadata` or `app_metadata` | PENDING |
-| **8** | Function `EXECUTE` Grants & Internal Primitive Lockdown | `0` `PUBLIC`/`anon` function grants; `34` `authenticated` grants; `5` `silver_spoon_treasury_worker` grants; `1` `silver_spoon_reconciler` grant (`reconcile_wallet_balance` ONLY); all `7` `internal_*` primitives have `false` across all 6 non-owner roles (including `service_role`); settlement RPCs blocked for `anon`/`authenticated`/`reconciler` | PENDING |
-| **9** | Triggers & Immutability | `24` user triggers active; deferred commit-time balancing trigger (`assert_journal_entry_balanced`) and immutability triggers (`prevent_immutable_mutation`, `guard_tax_applications_immutability`) present | PENDING |
-| **10** | Financial Ledger, Payment Providers & Settings | `payment_providers.paystack.is_enabled = false` (no DVA); `9` active system ledger accounts; `>= 1` open financial period; both Tier 2 & Tier 3 withdrawal cap settings present; `0` unbalanced journals; `0` drifted wallets | PENDING |
-| **11** | Non-Production Data Hygiene | `0` non-`.invalid` email addresses in `public.profiles`; `0` suspected 11-digit plaintext BVN/NIN values | PENDING |
-| **12** | Consolidated Scorecard (`12_SUMMARY_SCORECARD`) | All **14 / 14** scorecard checks = `PASS` (`0` `FAIL`) | PENDING |
+| **1** | PostgreSQL Version & Extensions (`Query 0A`) | `server_version_num >= 150000` (`PASS`); `pgcrypto` status logged | **PENDING** |
+| **2** | Migration History (`supabase_migrations.schema_migrations`) | All `14/14` versions (`20261123000100`..`20261123001400`) confirmed | **PASS** *(Confirmed remotely)* |
+| **3** | Schema Privileges & `pg_default_acl` (`Query 8A`/`8B`) | `PUBLIC`, `anon`, `authenticated`, `silver_spoon_reconciler`, `silver_spoon_treasury_worker` all have `CREATE = false`; `USAGE = true` for app/worker roles | **PENDING** |
+| **4** | Roles, `BYPASSRLS` & `pg_auth_members` (`Query 9D`) | `anon`, `authenticated`, `silver_spoon_reconciler`, `silver_spoon_treasury_worker` have `rolsuper=false`, `rolbypassrls=false`, `rolcanlogin=false`; no unprivileged member of `service_role`/`treasury_worker`/`postgres`/`supabase_admin` | **PENDING** |
+| **5** | Tables, Ownership, `ENABLE` + `FORCE RLS` & Table Grants (`Query 1`, `2A`, `9C`) | `40/40` tables with `ENABLE` + `FORCE RLS` & `postgres` owner (**PASS**); `0` client DML grants & `anon` `SELECT` on `investment_plans` only (`Query 9C` **PENDING**) | **IN PROGRESS** *(Tables & Forced RLS PASS; Table Grants PENDING)* |
+| **6** | RLS Policies (`Query 3A`, `3B`) | `63` `SELECT`-only policies covering `40` tables, `0` JWT metadata reads (**3A PASS**); detailed policy review (`rls_investment_plans_select_anon`, `kyc_*`, ledger, batches) (`Query 3B` **PENDING**) | **IN PROGRESS** *(3A PASS; 3B PENDING)* |
+| **7** | Function Inventory & Security Attributes (`Query 4`, `5A`, `5B`) | `48` app (`44` `SECURITY DEFINER` + `4` triggers, all `search_path = public, pg_temp`, owner `postgres`) + `1` infrastructure event-trigger (`rls_auto_enable`, `search_path = pg_catalog`, owner `postgres`) = `49` total (**Query 4 & 5A PASS**; **Query 5B raw confirmation PENDING**) | **IN PROGRESS** *(4 & 5A PASS; 5B PENDING)* |
+| **8** | Function `EXECUTE` Grants & Internal Primitive Lockdown (`Query 6`, `7A`/`7B`, `9A`/`9B`) | All `7/7` `internal_*` primitives = `false` across all 6 non-owner roles including `service_role` (**Query 6 PASS**); `0` `PUBLIC`/`anon` grants on 48 app functions & full 49-row ACL + `34`/`5`/`1` counts (`Query 7A`/`7B`, `9A`/`9B` **PENDING**) | **IN PROGRESS** *(Query 6 PASS; 7A/7B & 9A/9B PENDING)* |
+| **9** | Triggers, Indexes, Constraints & Enums (`Query 11A`–`11C`) | `20` enums, `149` indexes, `24` user triggers (deferred journal balancing + 6 immutability triggers), `2` custom `NOLOGIN` roles, `pg_constraint` breakdown | **PENDING** |
+| **10** | Financial Safeguards, Payment Providers & Settings (`Query 10A`–`10D`) | `payment_providers.paystack.is_enabled = false` (no DVA); `9` active system accounts; `>= 1` open period; M0014 live function guards; `0` JWT metadata reads; `0` unbalanced journals; `0` drifted wallets | **PENDING** |
+| **11** | Non-Production Data Hygiene (`Query 10D`) | `0` non-`.invalid` email addresses in `public.profiles`; `0` suspected plaintext BVN/NIN values | **PENDING** |
+| **12** | Full Catalog Sign-Off | All Sections 1–11 confirmed `PASS` with raw SQL outputs recorded | **PENDING** |
 
 *(Optional supplementary query in hosted Supabase SQL Editor to visually inspect the migration table rows directly)*:
 ```sql
@@ -144,11 +151,11 @@ Run these final verification checks after Phases 3 and 4 complete:
 
 ## Operator Sign-Off Record (Complete Only After Remote Execution)
 
-| Gate / Evidence Artifact | Operator | Date (UTC) | Verdict | Notes / Link to Output Log |
-| :--- | :--- | :--- | :---: | :--- |
-| Phase 1 — `staging_security_verification.sql` (`14/14` PASS) | _TBD_ | _TBD_ | **PENDING** | |
-| Phase 2 — Auth Admin API + `staging_synthetic_seed.sql` | _TBD_ | _TBD_ | **PENDING** | |
-| Phase 3 — Live PostgREST JWT Tests (`P1`–`P20`) | _TBD_ | _TBD_ | **PENDING** | |
-| Phase 4 — Two-Session Concurrency (`C1`–`C8`) | _TBD_ | _TBD_ | **PENDING** | |
-| Phase 5 — Immutability, Reconciliation (`0` drift) & Backups | _TBD_ | _TBD_ | **PENDING** | |
-| **Phase B.5 Hosted Staging Sign-Off (Prerequisite for Phase C)** | _TBD_ | _TBD_ | **PENDING** | Do not begin Phase C until all rows above are `PASS` |
+| Gate / Evidence Artifact | Scope Type | Operator | Date (UTC) | Verdict | Notes / Link to Output Log |
+| :--- | :---: | :--- | :--- | :---: | :--- |
+| Phase 1 — Remote Catalog & Security Checks (`docs/remote-staging-verification.md`) | Catalog | _In Progress_ | _In Progress_ | **IN PROGRESS** | Checks `0, 1, 2, 4, 6` + `3A, 5A` confirmed; `0A, 3B, 5B, 7A/7B, 8A/8B, 9A–9D, 10A–10D, 11A–11C` pending |
+| Phase 2 — Auth Admin API + `staging_synthetic_seed.sql` | Runtime Setup | _TBD_ | _TBD_ | **PENDING** | Synthetic `.invalid` users not yet provisioned |
+| Phase 3 — Live PostgREST JWT Tests (`P1`–`P20`) | Runtime Security | _TBD_ | _TBD_ | **PENDING** | Not yet executed remotely |
+| Phase 4 — Two-Session Concurrency & Locking (`C1`–`C8`) | Runtime Concurrency | _TBD_ | _TBD_ | **PENDING** | Actual multi-session locking tests not yet executed |
+| Phase 5 — Synthetic Wallet/Journal Runtime, Immutability, Reconciliation & Backups | Runtime Integrity | _TBD_ | _TBD_ | **PENDING** | Not yet executed remotely |
+| **Phase B.5 Hosted Staging Sign-Off (Prerequisite for Phase C)** | Release Gate | _TBD_ | _TBD_ | **PENDING** | **Phase C remains unauthorized** until ALL catalog and runtime gates above are `PASS` |

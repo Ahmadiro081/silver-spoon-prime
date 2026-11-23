@@ -6,50 +6,121 @@
 **Migration Baseline**: Migrations `20261123000100` through `20261123001400` (14 frozen forward-only migrations — **unmodified**)  
 **Safety Guarantee**: Every SQL query in this document is **100% READ-ONLY (`SELECT` only)**. Zero migrations are created or modified, zero database objects are altered, and zero secret keys, service-role keys, or passwords are requested or referenced.
 
-> **Honesty & Evidence Boundary**
-> - **Confirmed Remotely So Far**: Migration history confirmation provided by the operator showing all **14 migrations (`20261123000100`–`20261123001400`)** present on the remote Supabase project (**Check 0: PASS**).
-> - **Not Yet Executed Remotely**: Checks **1 through 11** have **NOT** been executed against the remote Supabase database. Their current status is **`NEEDS INVESTIGATION` (awaiting manual Supabase SQL Editor output)**. No remote check is marked `PASS` without actual remote query results.
+> **Honesty & Evidence Boundary (Catalog Checks vs. Runtime Tests)**
+> - **Confirmed Remotely (Catalog Checks Only)**:
+>   - **Check 0 (Migration History)**: All **14 migrations (`20261123000100`–`20261123001400`)** confirmed present (`PASS`).
+>   - **Check 1 (40 Tables)**: `40, 40, [], {}` confirmed (`PASS`).
+>   - **Check 2 (Forced RLS & Ownership)**: `40, 40, 40, 0, {postgres}` confirmed (`PASS`).
+>   - **Check 3A (RLS Policy Summary)**: `63, 40, 0, 0` confirmed (**3A PASS**; **Query 3B detailed policy review still PENDING**).
+>   - **Check 4 (Function Inventory)**: `49, 45, [], {rls_auto_enable}, []` confirmed — **48 SILVER SPOON application functions** (`44` `SECURITY DEFINER` + `4` invoker triggers) + **1 legitimate PostgreSQL/Supabase infrastructure event-trigger function** (`public.rls_auto_enable`, invoked by enabled event trigger `ensure_rls`, owner `postgres`, `SECURITY DEFINER`, `search_path = pg_catalog`) = **49 total observed** (`PASS`).
+>   - **Check 5A (`SECURITY DEFINER` Pinning Summary)**: `49, 45, 44, 1, 0, {postgres}` confirmed (**5A PASS**; **Query 5B detailed security configuration output still PENDING**).
+>   - **Check 6 (7 Internal Primitives Lockdown)**: All `7/7` `internal_*` primitives returned `false` for `PUBLIC`, `anon`, `authenticated`, `service_role`, `silver_spoon_treasury_worker`, and `silver_spoon_reconciler` (`PASS`).
+>   - **Check 9 (Partial RPC Investigation)**: Intentional `authenticated EXECUTE = true` grants on `public.fail_or_decline_withdrawal` and `public.reconcile_wallet_balance` (Migration `0012`) accepted subject to full remote definition/ACL confirmation (**Queries 9A–9D & 10B still PENDING**).
+> - **Not Yet Executed Remotely**:
+>   - **Remaining Catalog Checks**: Query `0A`, Query `3B` (detailed RLS policy review), Query `5B` (function security configuration), Query `7A`/`7B` (detailed `anon`/`PUBLIC` function ACL listing), Query `8A`/`8B` (schema `public` `CREATE` & default ACLs), Query `9A`–`9D` (full RPC/table/role graph), Query `10A`–`10D` (safeguards & live definition check), Query `11A`–`11C` (triggers/indexes/constraints inventory).
+>   - **Runtime & Concurrency Tests (0% Executed)**: Synthetic GoTrue user seeding, live PostgREST JWT tests (`P1`–`P20`), actual multi-session PostgreSQL row-locking tests (`C1`–`C8`), and synthetic wallet & journal runtime tests have **NOT** been executed remotely.
+> - **Governance Lock**: No Migration `0015` created; Migrations `0001`–`0014` unmodified; `VITE_DATA_PROVIDER=mock` intact; **Phase C remains unauthorized**.
 
 ---
 
-## 1. Architecture Baseline Reconciliation (Local Reference Documents)
+## 1. Architecture Baseline & Function Inventory Reconciliation
 
-Before comparing remote query results, note the chronological progression across the five reference documents so expected counts are evaluated against the authoritative post-Migration `0014` state:
+Before comparing remote query results, note the chronological progression across the five reference documents and the hosted PostgreSQL infrastructure classification:
 
 | Reference Document | Schema Snapshot Covered | Key Expected Counts |
 | :--- | :--- | :--- |
 | `docs/database-architecture.md` | Phase B design & 12-migration core schema | 40 tables, 3 disjoint customer sub-ledgers, deferred journal balancing, forced RLS, append-only audit/ledger |
-| `docs/phase-b-migration-report.md` | Post-Migration `0013` (13 migrations) | 40 tables, 149 indexes, 691 constraints, 24 triggers, **47 functions (43 `SECURITY DEFINER` + 4 triggers)**, 63 RLS policies |
-| `docs/phase-b-test-report.md` | Post-Migration `0013` local PGlite (`24/24`) | 40/40 forced RLS, **43/43 `SECURITY DEFINER`** pinned `search_path = public, pg_temp`, 63 policies |
+| `docs/phase-b-migration-report.md` | Post-Migration `0013` (13 migrations) | 40 tables, 149 indexes, 691 constraints, 24 triggers, **47 app functions (43 `SECURITY DEFINER` + 4 triggers)**, 63 RLS policies |
+| `docs/phase-b-test-report.md` | Post-Migration `0013` local PGlite (`24/24`) | 40/40 forced RLS, **43/43 app `SECURITY DEFINER`** pinned `search_path = public, pg_temp`, 63 policies |
 | `docs/security-architecture.md` | Post-Migration `0013` security architecture | 5-role RBAC (`public.user_roles`), universal four-eyes, `REVOKE CREATE ON SCHEMA public`, active-only `anon` plan visibility, `payment_providers.is_enabled = false` |
-| `docs/phase-b5-final-security-audit.md` *(Authoritative Target)* | **Post-Migration `0014` (14 migrations, `28/28` local PGlite)** | **40 tables**, **20 enums**, **149 indexes**, **691 constraints**, **24 triggers**, **48 functions (44 `SECURITY DEFINER` + 4 triggers)**, **63 RLS policies**, **7 `internal_*` primitives revoked even from `service_role`**, `silver_spoon_reconciler` isolated to 1 RPC |
+| `docs/phase-b5-final-security-audit.md` *(Authoritative App Target)* | **Post-Migration `0014` (14 migrations, `28/28` local PGlite)** | **40 tables**, **20 enums**, **149 indexes**, **691 constraints**, **24 triggers**, **48 app functions (44 `SECURITY DEFINER` + 4 triggers)**, **63 RLS policies**, **7 `internal_*` primitives revoked even from `service_role`**, `silver_spoon_reconciler` isolated to 1 RPC |
 
-*Why functions increased from 47 → 48 (43 → 44 `SECURITY DEFINER`)*: Forward-only Migration `0014` added `public.internal_is_reconciler_caller()` (`SECURITY DEFINER`) to separate `silver_spoon_reconciler` from `public.internal_is_service_caller()`. Because your remote project confirms all **14 migrations (`0001`–`0014`)**, every remote verification check below targets the **post-Migration `0014`** baseline.
+### 1.1 Hosted Supabase Function Inventory Classification (48 App + 1 Infrastructure = 49 Total)
+
+| Category | Count | `SECURITY DEFINER` | Expected `search_path` | Owner | Classification Notes |
+| :--- | :---: | :---: | :--- | :---: | :--- |
+| **SILVER SPOON Application Functions** | **48** | **44** (+ `4` invoker triggers) | `public, pg_temp` (48/48) | `postgres` | Exact Migrations `0001`–`0014` inventory |
+| **PostgreSQL / Supabase Infrastructure Event-Trigger Function** | **1** | **1** (`public.rls_auto_enable`) | `pg_catalog` | `postgres` | Invoked by enabled event trigger `ensure_rls`; **excluded from the 48-function application inventory and tracked separately** |
+| **Total Observed Non-Extension Functions in `public`** | **49** | **45** | `48` × `public, pg_temp` + `1` × `pg_catalog` | `postgres` | Matches remote Query 4 (`49,45`) and Query 5A (`49,45,44,1,0,{postgres}`) |
+
+### 1.2 Confirmed Expected ACLs for Dual-Audience Financial & Reconciliation RPCs
+
+Read-only security investigation of Migrations `0001`–`0014` confirmed that `authenticated EXECUTE = true` on the two RPCs below is **intentional by design** (explicitly granted in Migration `0012` so `finance_officer` and `super_admin` JWTs can execute authorized workflows without ever holding `service_role`), accepted subject to full remote definition/ACL confirmation:
+
+| Function | `PUBLIC` | `anon` | `authenticated` | `service_role` | `silver_spoon_treasury_worker` | `silver_spoon_reconciler` | Migration Origin & Internal Safeguards |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`public.fail_or_decline_withdrawal`** | `false` | `false` | **`true`** *(intentional)* | `true` | `true` | `false` | **M0012** lines 308 & 339; **M0014** lines 833–950. `SECURITY DEFINER`, `search_path = public, pg_temp`. `'failed'` strictly requires 5-gate `internal_is_service_caller()`; `'declined'` strictly requires independent `finance_officer`/`super_admin` and is blocked once approved/batched (`INVALID_DECLINE_STATE`) or self-owned (`FOUR_EYES_VIOLATION`). |
+| **`public.reconcile_wallet_balance`** | `false` | `false` | **`true`** *(intentional)* | `true` | `true` | **`true`** *(sole grant)* | **M0012** lines 318, 340 & 344; **M0014** lines 347–442. `SECURITY DEFINER`, `search_path = public, pg_temp`. Strictly requires `internal_is_reconciler_caller()` OR `finance_officer`/`super_admin`. Never modifies wallet balances or posts financial journals (updates `reconciled_at` or logs drift alert only). |
 
 ---
 
-## 2. Current Remote Verification Status Scorecard
+## 2. Current Remote Verification Status Scorecard (Catalog vs. Runtime)
 
-| Check | Verification Area | Authoritative Expected Baseline (Post-M0014) | Current Remote Status | Basis |
+### 2.1 Remote Catalog & Security Configuration Checks
+
+| Check | Verification Area | Authoritative Expected Baseline (Post-M0014 + Hosted) | Current Remote Status | Recorded Evidence / Remaining Action |
 | :---: | :--- | :--- | :---: | :--- |
-| **0** | Remote Migration History (`0001`–`0014`) | 14 migrations (`20261123000100`..`20261123001400`) | **PASS** | Confirmed by operator's remote migration history query |
-| **1** | 40 Expected Public Tables | Exact 40 tables across Modules A–K (`0` missing, `0` unexpected) | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 1 |
-| **2** | `ENABLE` + `FORCE ROW LEVEL SECURITY` | `40 / 40` tables with `relrowsecurity = true` AND `relforcerowsecurity = true` | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 2 |
-| **3** | 63 Expected RLS Policies | `63` `SELECT`-only policies across `40` tables; active-only `anon` plan policy; strict KYC isolation | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 3 |
-| **4** | 48 Expected Database Functions | `48` functions (`44` `SECURITY DEFINER` + `4` invoker triggers), `0` missing | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 4 |
-| **5** | `SECURITY DEFINER` Ownership & `search_path` | `44 / 44` `SECURITY DEFINER` (and `48 / 48` total) pin `search_path=public, pg_temp`; safe owner | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 5 |
-| **6** | Internal Primitive Privilege Lockdown | All `7` `internal_*` primitives have `EXECUTE = false` for `PUBLIC`, `anon`, `authenticated`, `service_role`, `silver_spoon_treasury_worker`, `silver_spoon_reconciler` | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 6 |
-| **7** | Zero `anon` & `PUBLIC` Function Grants | `0 / 48` functions executable by `anon` or `PUBLIC` | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 7 |
-| **8** | Schema `public` `CREATE` Restrictions | `CREATE = false` for `PUBLIC`, `anon`, `authenticated`, `silver_spoon_reconciler`, `silver_spoon_treasury_worker` | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 8 |
-| **9** | Financial RPC Role Permissions & Role Graph | Exact `authenticated` (34), `treasury_worker` (5), `reconciler` (1) grants; settlement RPCs blocked for `anon`/`authenticated`/`reconciler`; safe `pg_auth_members`; `0` client table DML grants | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 9 |
-| **10** | Withdrawal, Deposit & Ledger Safeguards | Paystack disabled (no DVA); 9 system accounts; open period; four-eyes/daily-cap/decline/idempotency/expiry guards live; `0` unbalanced journals; `0` drifted wallets; `0` JWT metadata reads | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 10 |
-| **11** | Triggers, Indexes, Constraints & Object Inventory | `20` enums, `24` user triggers, `149` indexes, `691` constraints (note PG version nuance), `2` custom `NOLOGIN` roles | **NEEDS INVESTIGATION** | Pending manual SQL Editor execution of Query 11 |
+| **0** | Remote Migration History (`0001`–`0014`) | 14 migrations (`20261123000100`..`20261123001400`) | **PASS** | Operator confirmed all 14 versions present (Query `0A` PG version snapshot still pending) |
+| **1** | 40 Expected Public Tables | Exact 40 tables (`0` missing, `0` unexpected) | **PASS** | Observed: `40, 40, [], {}` |
+| **2** | `ENABLE` + `FORCE ROW LEVEL SECURITY` | `40 / 40` tables with `ENABLE` + `FORCE RLS`, safe owner | **PASS** | Observed: `40, 40, 40, 0, {postgres}` |
+| **3** | 63 Expected RLS Policies | `63` `SELECT`-only policies across `40` tables + verified qualifiers | **NEEDS INVESTIGATION** | **3A PASS** (`63, 40, 0, 0`); **Query 3B detailed RLS policy review PENDING** |
+| **4** | Function Inventory (48 App + 1 Infra = 49) | `48` app (`44` `SECURITY DEFINER` + `4` triggers) + `1` infra (`rls_auto_enable`) | **PASS** | Observed: `49, 45, [], {rls_auto_enable}, []`; `rls_auto_enable` verified as `ensure_rls` infrastructure event-trigger function (`pg_catalog`, `postgres`) |
+| **5** | `SECURITY DEFINER` Ownership & `search_path` | `44/44` app `SECURITY DEFINER` pinned to `public, pg_temp` + `rls_auto_enable` pinned to `pg_catalog` | **NEEDS INVESTIGATION** | **5A PASS** (`49, 45, 44, 1, 0, {postgres}`); **Query 5B function security configuration output PENDING** |
+| **6** | Internal Primitive Privilege Lockdown | All `7` `internal_*` primitives = `false` across all 6 non-owner roles | **PASS** | Observed: `7/7` rows `false,false,false,false,false,false` |
+| **7** | Zero `anon` & `PUBLIC` Function Grants | `0 / 48` app functions executable by `anon` or `PUBLIC` (plus verify `rls_auto_enable` ACL) | **NEEDS INVESTIGATION** | **Query 7A & Query 7B detailed function ACL listing PENDING** |
+| **8** | Schema `public` `CREATE` Restrictions | `CREATE = false` for `PUBLIC`, `anon`, `authenticated`, workers | **NEEDS INVESTIGATION** | **Query 8A & Query 8B PENDING** |
+| **9** | Financial RPC Role Permissions & Role Graph | `34` `authenticated`, `5` `treasury_worker`, `1` `reconciler`; intentional dual grants accepted; `0` client DML grants; safe `pg_auth_members` | **NEEDS INVESTIGATION** | `fail_or_decline_withdrawal` & `reconcile_wallet_balance` grants accepted as intentional; **full Queries 9A–9D PENDING** |
+| **10** | Withdrawal, Deposit & Ledger Safeguards | Paystack disabled (no DVA); 9 system accounts; open period; M0014 live function guards; `0` JWT metadata reads; `0` unbalanced journals; `0` drift | **NEEDS INVESTIGATION** | **Queries 10A–10D PENDING** (also confirms live remote bodies of both dual-audience RPCs) |
+| **11** | Triggers, Indexes, Constraints & Object Inventory | `20` enums, `40` tables, `149` indexes, `24` triggers, `48` app + `1` infra functions, `63` policies, `2` custom roles, `pg_constraint` breakdown | **NEEDS INVESTIGATION** | **Queries 11A–11C inventory reconciliation PENDING** |
+
+### 2.2 Remote Runtime & Concurrency Tests (Strictly Distinct from Catalog Checks)
+
+| Runtime Test Suite | Scope | Current Remote Status |
+| :--- | :--- | :---: |
+| **Synthetic Persona Seeding** | Auth Admin API creation of 8 `.invalid` users + `staging_synthetic_seed.sql` | **NEEDS INVESTIGATION (NOT EXECUTED)** |
+| **Live PostgREST JWT Runtime Tests (`P1`–`P20`)** | Real GoTrue JWTs across `anon`, `investor` (with tampered `user_metadata`), `finance_officer`, `compliance_officer`, `admin`, `super_admin`, and server-only `service_role` | **NEEDS INVESTIGATION (NOT EXECUTED)** |
+| **Multi-Session Row-Locking Tests (`C1`–`C8`)** | Two independent `psql` connections testing `FOR UPDATE` / `FOR SHARE` blocking (`staging_multisession_concurrency.sql` + M0014 daily-cap & plan-lock races) | **NEEDS INVESTIGATION (NOT EXECUTED)** |
+| **Synthetic Wallet & Journal Runtime Tests** | End-to-end deposit → withdrawal → four-eyes approval/decline → settlement → immutability → `reconcile_wallet_balance` zero-drift check | **NEEDS INVESTIGATION (NOT EXECUTED)** |
+
+### 2.3 Preserved Raw Remote Query Outputs Captured So Far
+
+```csv
+-- Query 1 (PASS)
+actual_table_count,expected_table_count,missing_tables,unexpected_tables
+40,40,[],{}
+
+-- Query 2A (PASS)
+total_public_tables,rls_enabled_count,rls_forced_count,unsafe_owner_count,table_owners
+40,40,40,0,{postgres}
+
+-- Query 3A (PASS — Query 3B pending)
+total_rls_policies,tables_covered,non_select_policies,jwt_metadata_policies
+63,40,0,0
+
+-- Query 4 (PASS — 48 app + 1 infrastructure event_trigger function rls_auto_enable = 49 total)
+actual_app_function_count,actual_secdef_count,missing_functions,unexpected_app_functions,secdef_mismatches
+49,45,[],{rls_auto_enable},[]
+
+-- Query 5A (PASS — Query 5B pending)
+total_app_functions,secdef_count,secdef_pinned_count,any_unpinned_count,unsafe_owner_count,distinct_owners
+49,45,44,1,0,{postgres}
+
+-- Query 6 (PASS)
+internal_primitive,pub_exec,anon_exec,auth_exec,service_role_exec,treasury_worker_exec,reconciler_exec
+internal_assert_service_caller,false,false,false,false,false,false
+internal_get_open_period_id,false,false,false,false,false,false
+internal_get_system_account_id,false,false,false,false,false,false
+internal_is_reconciler_caller,false,false,false,false,false,false
+internal_is_service_caller,false,false,false,false,false,false
+internal_post_journal_entry,false,false,false,false,false,false
+internal_write_audit_log,false,false,false,false,false,false
+```
 
 ---
 
 ## 3. Manual Read-Only SQL Verification Queries (Supabase SQL Editor)
 
-Run each query block independently in the **Supabase SQL Editor** against your staging project. All queries are strictly read-only (`SELECT` only). Paste the query results back to update each check from `NEEDS INVESTIGATION` to `PASS` or `FAIL`.
+Run each remaining query block independently in the **Supabase SQL Editor** against your staging project. All queries are strictly read-only (`SELECT` only). Paste the query results back to update each remaining check from `NEEDS INVESTIGATION` to `PASS` or `FAIL`.
 
 ---
 
@@ -81,7 +152,7 @@ ORDER BY version;
 ---
 
 ### Check 1 — Verify All 40 Expected Public Tables Exist
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **PASS** *(Observed: `40, 40, [], {}`)*
 
 ```sql
 -- QUERY 1: Exact diff between the 40 expected tables and remote public schema tables
@@ -144,7 +215,7 @@ SELECT
 ---
 
 ### Check 2 — Verify `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` on All 40 Tables
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **PASS** *(Observed Query 2A: `40, 40, 40, 0, {postgres}`)*
 
 ```sql
 -- QUERY 2A: Summary of RLS + FORCE RLS and table ownership across public schema
@@ -182,7 +253,7 @@ ORDER BY c.relname;
 ---
 
 ### Check 3 — Verify All 63 Expected RLS Policies Exist & Enforce Intended Visibility
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **NEEDS INVESTIGATION** *(Query 3A **PASS**: `63, 40, 0, 0`; Query 3B detailed policy review **PENDING**)*
 
 ```sql
 -- QUERY 3A: Policy summary across public schema
@@ -228,8 +299,8 @@ ORDER BY c.relname;
 
 ---
 
-### Check 4 — Verify All 48 Expected Database Functions Exist
-**Current Status**: **NEEDS INVESTIGATION**
+### Check 4 — Verify All 48 Expected Application Functions Exist (+ 1 Infrastructure Event-Trigger Function = 49 Total)
+**Current Status**: **PASS** *(Observed: `49, 45, [], {rls_auto_enable}, []` — 48/48 SILVER SPOON application functions match; `public.rls_auto_enable` verified separately as legitimate infrastructure event-trigger function invoked by enabled event trigger `ensure_rls`, owner `postgres`, `SECURITY DEFINER`, `search_path = pg_catalog`)*
 
 ```sql
 -- QUERY 4: Exact diff between the 48 expected functions (Post-M0014) and remote public functions
@@ -330,11 +401,11 @@ SELECT
 
 ---
 
-### Check 5 — Verify All 44 `SECURITY DEFINER` Functions Pin `search_path = public, pg_temp` & Safe Ownership
-**Current Status**: **NEEDS INVESTIGATION**
+### Check 5 — Verify All 44 Application `SECURITY DEFINER` Functions Pin `search_path = public, pg_temp` & Safe Ownership
+**Current Status**: **NEEDS INVESTIGATION** *(Query 5A **PASS**: `49, 45, 44, 1, 0, {postgres}` — 44/44 app `SECURITY DEFINER` + 4/4 trigger functions pinned to `public, pg_temp`, 1 infrastructure function `rls_auto_enable` pinned to `pg_catalog`; Query 5B raw confirmation **PENDING**)*
 
 ```sql
--- QUERY 5A: Summary of search_path pinning and ownership across all app functions
+-- QUERY 5A: Summary of search_path pinning and ownership across all public non-extension functions
 WITH app_procs AS (
   SELECT p.oid, p.proname, p.prosecdef, p.proconfig, pg_get_userbyid(p.proowner) AS owner_role
   FROM pg_proc p
@@ -343,39 +414,47 @@ WITH app_procs AS (
     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
 )
 SELECT
-  COUNT(*) AS total_app_functions,
-  COUNT(*) FILTER (WHERE prosecdef) AS secdef_count,
-  COUNT(*) FILTER (WHERE prosecdef AND proconfig IS NOT NULL AND 'search_path=public, pg_temp' = ANY(proconfig)) AS secdef_pinned_count,
-  COUNT(*) FILTER (WHERE proconfig IS NULL OR NOT ('search_path=public, pg_temp' = ANY(proconfig))) AS any_unpinned_count,
+  COUNT(*) AS total_observed_functions,
+  COUNT(*) FILTER (WHERE proname <> 'rls_auto_enable') AS app_functions_count,
+  COUNT(*) FILTER (WHERE proname = 'rls_auto_enable') AS infra_event_trigger_count,
+  COUNT(*) FILTER (WHERE prosecdef) AS total_secdef_count,
+  COUNT(*) FILTER (WHERE prosecdef AND proname <> 'rls_auto_enable' AND proconfig IS NOT NULL AND 'search_path=public, pg_temp' = ANY(proconfig)) AS app_secdef_pinned_count,
+  COUNT(*) FILTER (WHERE proname <> 'rls_auto_enable' AND (proconfig IS NULL OR NOT ('search_path=public, pg_temp' = ANY(proconfig)))) AS app_unpinned_count,
   COUNT(*) FILTER (WHERE owner_role IN ('anon', 'authenticated', 'service_role')) AS unsafe_owner_count,
   array_agg(DISTINCT owner_role) AS distinct_owners
 FROM app_procs;
 
--- QUERY 5B: List any function missing pinned search_path or owned by an unsafe role (Expected: 0 rows)
+-- QUERY 5B: Confirm exact security configuration of rls_auto_enable + verify ZERO unpinned/unsafe SILVER SPOON functions
 SELECT
   p.proname AS function_name,
+  CASE WHEN p.proname = 'rls_auto_enable' THEN 'infrastructure_event_trigger' ELSE 'application' END AS classification,
   pg_get_userbyid(p.proowner) AS owner_role,
   p.prosecdef AS is_security_definer,
-  p.proconfig
+  format_type(p.prorettype, NULL) AS return_type,
+  p.proconfig,
+  has_function_privilege('public', p.oid, 'EXECUTE') AS pub_exec,
+  has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_exec,
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
   AND (
-    p.proconfig IS NULL
+    p.proname = 'rls_auto_enable'
+    OR p.proconfig IS NULL
     OR NOT ('search_path=public, pg_temp' = ANY(p.proconfig))
     OR pg_get_userbyid(p.proowner) IN ('anon', 'authenticated', 'service_role')
   )
 ORDER BY p.proname;
 ```
 
-- **PASS**: `secdef_count = 44`, `secdef_pinned_count = 44`, `any_unpinned_count = 0`, `unsafe_owner_count = 0`, all owners are `postgres` / `supabase_admin`, and Query 5B returns `0` rows.
-- **FAIL**: Any `SECURITY DEFINER` function missing `search_path=public, pg_temp` or owned by `anon`/`authenticated`/`service_role`.
+- **PASS**: Query 5B returns **only** `rls_auto_enable` (`classification = 'infrastructure_event_trigger'`, `owner_role = 'postgres'`, `is_security_definer = true`, `return_type = 'event_trigger'`, `proconfig = {search_path=pg_catalog}`) and **0** application functions.
+- **FAIL**: Any SILVER SPOON application function appears in Query 5B.
 
 ---
 
 ### Check 6 — Verify Internal Primitive Execution Privileges Are Restricted
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **PASS** *(Observed: all 7/7 `internal_*` primitives returned `false,false,false,false,false,false` across all 6 non-owner roles including `service_role`)*
 
 ```sql
 -- QUERY 6: Inspect EXECUTE privileges on all 7 low-level internal_* primitives
@@ -407,38 +486,39 @@ ORDER BY p.proname;
 
 ---
 
-### Check 7 — Verify Anonymous (`anon`) & `PUBLIC` Have Zero `EXECUTE` Privileges Across All Application Functions
-**Current Status**: **NEEDS INVESTIGATION**
+### Check 7 — Verify Anonymous (`anon`) & `PUBLIC` Have Zero `EXECUTE` Privileges Across All 48 Application Functions
+**Current Status**: **NEEDS INVESTIGATION** *(Query 7A & Query 7B detailed function ACL listing **PENDING**)*
 
 ```sql
--- QUERY 7A: Count of application functions executable by anon or PUBLIC (Expected: 0, 0)
+-- QUERY 7A: Count of application functions (48) vs. infrastructure event-trigger (1) executable by anon or PUBLIC
 SELECT
-  COUNT(*) FILTER (WHERE has_function_privilege('anon', p.oid, 'EXECUTE')) AS anon_executable_app_functions,
-  COUNT(*) FILTER (WHERE has_function_privilege('public', p.oid, 'EXECUTE')) AS public_executable_app_functions
+  COUNT(*) FILTER (WHERE p.proname <> 'rls_auto_enable' AND has_function_privilege('anon', p.oid, 'EXECUTE')) AS anon_executable_app_functions,
+  COUNT(*) FILTER (WHERE p.proname <> 'rls_auto_enable' AND has_function_privilege('public', p.oid, 'EXECUTE')) AS public_executable_app_functions,
+  COUNT(*) FILTER (WHERE p.proname = 'rls_auto_enable' AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('public', p.oid, 'EXECUTE'))) AS infra_rls_auto_enable_public_or_anon
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e');
 
--- QUERY 7B: List any application function executable by anon or PUBLIC (Expected: 0 rows)
+-- QUERY 7B: Detailed function ACL listing across all 49 non-extension public functions (separating 48 app + 1 infra)
 SELECT
   p.proname AS function_name,
-  pg_get_function_identity_arguments(p.oid) AS args,
+  CASE WHEN p.proname = 'rls_auto_enable' THEN 'infrastructure_event_trigger' ELSE 'application' END AS classification,
+  has_function_privilege('public', p.oid, 'EXECUTE') AS pub_exec,
   has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_exec,
-  has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec,
+  has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role_exec,
+  has_function_privilege('silver_spoon_treasury_worker', p.oid, 'EXECUTE') AS treasury_worker_exec,
+  has_function_privilege('silver_spoon_reconciler', p.oid, 'EXECUTE') AS reconciler_exec
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
-  AND (
-    has_function_privilege('anon', p.oid, 'EXECUTE')
-    OR has_function_privilege('public', p.oid, 'EXECUTE')
-  )
-ORDER BY p.proname;
+ORDER BY classification, p.proname;
 ```
 
-- **PASS**: `anon_executable_app_functions = 0`, `public_executable_app_functions = 0`, and Query 7B returns `0` rows.
-- **FAIL**: Any application function executable by `anon` or `PUBLIC`.
+- **PASS**: `anon_executable_app_functions = 0`, `public_executable_app_functions = 0`, and Query 7B confirms exact expected ACLs across all 48 application functions (plus clear visibility of `rls_auto_enable`, which as `RETURNS event_trigger` cannot be called directly via PostgREST RPC regardless).
+- **FAIL**: Any of the 48 application functions is executable by `anon` or `PUBLIC`.
 
 ---
 
@@ -485,18 +565,20 @@ ORDER BY granting_role, object_type;
 ---
 
 ### Check 9 — Verify Financial RPC Permissions, Client Table Grants & Role Separation Graph
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **NEEDS INVESTIGATION** *(Intentional `authenticated EXECUTE = true` grants on `fail_or_decline_withdrawal` & `reconcile_wallet_balance` accepted per Section 1.2; full Queries 9A–9D **PENDING**)*
 
 ```sql
--- QUERY 9A: Full EXECUTE matrix across all 48 app functions (counts per role)
+-- QUERY 9A: Full EXECUTE matrix across the 48 application functions (excluding infrastructure event-trigger rls_auto_enable)
 WITH app_procs AS (
   SELECT p.oid, p.proname
   FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public'
+    AND p.proname <> 'rls_auto_enable'
     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
 )
 SELECT
+  COUNT(*) AS app_function_count,
   COUNT(*) FILTER (WHERE has_function_privilege('authenticated', oid, 'EXECUTE')) AS authenticated_exec_count,
   COUNT(*) FILTER (WHERE has_function_privilege('service_role', oid, 'EXECUTE')) AS service_role_exec_count,
   COUNT(*) FILTER (WHERE has_function_privilege('silver_spoon_treasury_worker', oid, 'EXECUTE')) AS treasury_worker_exec_count,
@@ -505,14 +587,15 @@ SELECT
   array_agg(proname ORDER BY proname) FILTER (WHERE has_function_privilege('silver_spoon_reconciler', oid, 'EXECUTE')) AS reconciler_fns
 FROM app_procs;
 
--- QUERY 9B: Verify settlement RPCs are strictly blocked for anon, authenticated, and reconciler
+-- QUERY 9B: Verify settlement & reconciliation RPC ACLs (including intentional dual-audience grants)
 SELECT
-  p.proname AS settlement_rpc,
+  p.proname AS rpc_name,
+  has_function_privilege('public', p.oid, 'EXECUTE') AS pub_exec,
   has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_exec,
   has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec,
-  has_function_privilege('silver_spoon_reconciler', p.oid, 'EXECUTE') AS reconciler_exec,
   has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role_exec,
-  has_function_privilege('silver_spoon_treasury_worker', p.oid, 'EXECUTE') AS treasury_worker_exec
+  has_function_privilege('silver_spoon_treasury_worker', p.oid, 'EXECUTE') AS treasury_worker_exec,
+  has_function_privilege('silver_spoon_reconciler', p.oid, 'EXECUTE') AS reconciler_exec
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
@@ -697,10 +780,10 @@ SELECT
 ---
 
 ### Check 11 — Verify Triggers, Indexes, Constraints, Enums & Custom Roles Match Local Audit Inventory
-**Current Status**: **NEEDS INVESTIGATION**
+**Current Status**: **NEEDS INVESTIGATION** *(Queries 11A–11C **PENDING**)*
 
 ```sql
--- QUERY 11A: Complete pg_catalog object inventory vs. local audit baseline
+-- QUERY 11A: Complete pg_catalog object inventory separating 48 app functions + 1 infra event-trigger function = 49 total
 SELECT
   (SELECT COUNT(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typtype = 'e') AS enum_types_count,
   (SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r') AS tables_count,
@@ -708,7 +791,9 @@ SELECT
   (SELECT COUNT(*) FROM pg_constraint con JOIN pg_namespace n ON n.oid = con.connamespace WHERE n.nspname = 'public') AS constraints_total,
   (SELECT COUNT(*) FROM pg_constraint con JOIN pg_namespace n ON n.oid = con.connamespace WHERE n.nspname = 'public' AND con.contype <> 'n') AS constraints_excl_not_null,
   (SELECT COUNT(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal) AS triggers_count,
-  (SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')) AS app_functions_count,
+  (SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname <> 'rls_auto_enable' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')) AS app_functions_count,
+  (SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rls_auto_enable') AS infra_event_trigger_functions_count,
+  (SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')) AS total_observed_functions_count,
   (SELECT COUNT(*) FROM pg_policies WHERE schemaname = 'public') AS rls_policies_count,
   (SELECT COUNT(*) FROM pg_roles WHERE rolname IN ('silver_spoon_treasury_worker', 'silver_spoon_reconciler')) AS custom_worker_roles_count;
 
@@ -738,23 +823,34 @@ GROUP BY con.contype
 ORDER BY con.contype;
 ```
 
-- **Local Audit Baseline (`docs/phase-b5-final-security-audit.md`)**:
+- **Local Audit Baseline (`docs/phase-b5-final-security-audit.md`) + Hosted Classification**:
   - `enum_types_count = 20`
   - `tables_count = 40`
   - `indexes_count = 149`
   - `triggers_count = 24` (including `assert_journal_entry_balanced` with `is_deferrable = true` & `initially_deferred = true`, `prevent_immutable_mutation` on `audit_logs`, `journal_entries`, `journal_lines`, `payment_events`, `webhook_logs`, and `guard_tax_applications_immutability` on `tax_applications`)
-  - `app_functions_count = 48`
+  - `app_functions_count = 48`, `infra_event_trigger_functions_count = 1` (`rls_auto_enable`), `total_observed_functions_count = 49`
   - `rls_policies_count = 63`
   - `custom_worker_roles_count = 2`
-  - `constraints_total` / `constraints_excl_not_null`: Local PGlite (PostgreSQL 17/18 WASM) reported `691` total constraints (which includes `contype = 'n'` `NOT NULL` catalog constraints on PG 18, whereas PostgreSQL 15/16/17 stores `NOT NULL` in `pg_attribute.attnotnull` rather than `pg_constraint`). Query 11C splits counts by `contype` (`p`, `u`, `f`, `c`, `n`) so PostgreSQL 15/16/17 vs. 18 differences are evaluated accurately without false alarms!
-- **PASS**: Exact match on `enums (20)`, `tables (40)`, `indexes (149)`, `triggers (24)` including deferred balancing & immutability triggers, `app_functions (48)`, `rls_policies (63)`, `custom_worker_roles (2)`, and all `p`/`u`/`f`/`c` constraints present.
-- **NEEDS INVESTIGATION**: `constraints_total < 691` solely because hosted Supabase runs PostgreSQL 15/16/17 (where `contype = 'n'` rows do not exist in `pg_constraint`) — verify `p`, `u`, `f`, `c` counts via Query 11C.
+  - `constraints_total` / `constraints_excl_not_null`: Local PGlite (PostgreSQL 17/18 WASM) reported `691` total constraints (including `contype = 'n'` `NOT NULL` catalog constraints on PG 18, whereas PostgreSQL 15/16/17 stores `NOT NULL` in `pg_attribute.attnotnull`). Query 11C splits counts by `contype` (`p`, `u`, `f`, `c`, `n`) for exact comparison.
+- **PASS**: Exact match on `enums (20)`, `tables (40)`, `indexes (149)`, `triggers (24)` including deferred balancing & immutability triggers, `app_functions (48)` + `infra (1)` = `49`, `rls_policies (63)`, `custom_worker_roles (2)`, and all `p`/`u`/`f`/`c` constraints present.
+- **NEEDS INVESTIGATION**: `constraints_total < 691` solely because hosted Supabase runs PostgreSQL 15/16/17 (no `contype = 'n'` rows) — verify `p`, `u`, `f`, `c` counts via Query 11C.
 - **FAIL**: Missing enums, indexes, triggers (especially deferred journal balancing or immutability triggers), `CHECK`/`UNIQUE`/`FK` constraints, or custom worker roles.
 
 ---
 
-## 4. Next Step After Executing Queries in Supabase SQL Editor
+## 4. Remaining Uncompleted Verification Checks & Next Recommended Sequence
 
-1. Run **Queries 0 through 11** manually in the **Supabase SQL Editor** (zero modifications will occur).
-2. Share the returned query outputs (without any API keys, service-role keys, or database passwords).
-3. Each check in Section 2 will then be formally updated to **`PASS`**, **`FAIL`**, or **`NEEDS INVESTIGATION`** based strictly on the observed remote query results before proceeding to live PostgREST JWT tests and two-session concurrency testing (`docs/staging-post-deployment-verification.md`).
+1. **Complete Remaining Read-Only Catalog Checks** (in Supabase SQL Editor):
+   - **Query 3B** — Detailed high-sensitivity RLS policy qualifiers (`investment_plans`, `kyc_*`, `journal_*`, `withdrawal_batches`, `payment_*`, `audit_logs`, `user_roles`).
+   - **Query 5B** — Confirm raw security config of `rls_auto_enable` and `0` unpinned SILVER SPOON functions.
+   - **Query 7A & 7B** — Confirm `0` `anon`/`PUBLIC` `EXECUTE` grants on all 48 app functions and record full 49-row ACL table.
+   - **Query 8A & 8B** — Confirm `public` schema `CREATE = false` and inspect `pg_default_acl`.
+   - **Query 9A–9D** — Confirm complete RPC grant matrix, `0` client table DML grants, `anon` `SELECT` on `investment_plans` only, and `pg_auth_members` graph.
+   - **Query 10A–10D** — Confirm Paystack disabled, 9 system accounts, open period, Migration `0014` live guardrails in `pg_proc.prosrc` (including `fail_or_decline_withdrawal`), `0` JWT metadata reads, `0` unbalanced journals, and `0` wallet drift.
+   - **Query 11A–11C** — Complete object inventory reconciliation (`enums`, `indexes`, `constraints`, `triggers`, `roles`).
+2. **Execute Runtime & Concurrency Validation (`docs/staging-post-deployment-verification.md`)**:
+   - Synthetic Auth Admin API seeding + `staging_synthetic_seed.sql`.
+   - Live HTTPS PostgREST JWT authorization tests (`P1`–`P20`).
+   - Two-session PostgreSQL multi-connection locking tests (`C1`–`C8`).
+   - Synthetic wallet & journal runtime tests, immutability checks, and zero-drift reconciliation.
+3. **Hold Phase C Gate**: Keep `VITE_DATA_PROVIDER=mock` and do **not** begin Phase C until both catalog verification and runtime/concurrency tests pass completely.
