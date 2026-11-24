@@ -3,13 +3,22 @@ import { AppStateContext, type AppStateContextValue } from "@/context/AppStateCo
 import { mockDataProvider, type MockDataSnapshot } from "@/services/mockDataProvider";
 import {
   buildInvestmentRecord,
+  buildMaturitySettlementBundle,
   buildTransactionRecord,
   generateId,
+  generateNumericCode,
+  generateRecoveryToken,
+  markAllNotificationsReadForUser,
+  markNotificationReadForUser,
+  validateBankAccountDetails,
   validateDeposit,
   validateInvestmentSubscription,
+  validateKycSubmission,
+  validatePlatformSettings,
   validateWithdrawal,
   type CreatePlanInput,
   type DepositInput,
+  type KycSubmissionInput,
   type PlatformServiceContract,
   type SubscribeInvestmentInput,
   type WithdrawalInput,
@@ -19,15 +28,44 @@ import type {
   AuditLogEntry,
   BankAccountDetails,
   InvestmentPlan,
+  KycSubmissionRecord,
   NotificationCategory,
   NotificationItem,
   TransactionStatus,
   UserProfile,
 } from "@/types/domain";
-import { calculateUserWalletMetrics } from "@/utils/calculations";
 import { formatNaira, maskAccountNumber } from "@/utils/format";
+import { selectIsolatedAccountView } from "@/utils/mockIntegrity";
 
 type PersistedState = MockDataSnapshot;
+
+const EMPTY_GUEST_PROFILE: UserProfile = {
+  id: "",
+  fullName: "",
+  email: "",
+  emailVerified: false,
+  phone: "",
+  city: "",
+  address: "",
+  role: "investor",
+  tier: "Silver",
+  status: "Active",
+  kycLevel: "Tier 1",
+  referralCode: "",
+  joinedAt: "",
+  lastLoginAt: "",
+  twoFactorEnabled: false,
+  emailAlerts: false,
+  smsAlerts: false,
+  bankAccount: {
+    bankName: "",
+    bankCode: "",
+    accountNumber: "",
+    accountName: "",
+    verified: false,
+    verificationStatus: "Unverified",
+  },
+};
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(() => mockDataProvider.loadSnapshot());
@@ -43,56 +81,40 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [state.session.authenticated, state.session.userId, state.users]);
 
   const currentUser = useMemo(() => {
-    return authenticatedUser ?? state.users.find((u) => u.id === state.session.userId) ?? state.users[0]!;
+    return (
+      authenticatedUser ??
+      state.users.find((u) => u.id === state.session.userId) ??
+      EMPTY_GUEST_PROFILE
+    );
   }, [authenticatedUser, state.users, state.session.userId]);
 
-  // Strict per-account isolation: never inherit another user's or investor's records
+  // Strict per-account isolation via centralized pure selector: never inherit another user's records
   const activeAccountId = authenticatedUser?.id ?? "";
 
-  const userTransactions = useMemo(
-    () =>
-      activeAccountId
-        ? state.transactions
-            .filter((t) => t.userId === activeAccountId)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        : [],
-    [state.transactions, activeAccountId],
+  const isolatedAccountView = useMemo(
+    () => selectIsolatedAccountView(state, activeAccountId),
+    [state, activeAccountId],
   );
 
-  const userInvestments = useMemo(
-    () =>
-      activeAccountId
-        ? state.investments
-            .filter((i) => i.userId === activeAccountId)
-            .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-        : [],
-    [state.investments, activeAccountId],
-  );
+  const {
+    transactions: userTransactions,
+    investments: userInvestments,
+    wallet: userWallet,
+    referrals: userReferrals,
+    notifications: userNotifications,
+    unreadNotificationCount,
+    kycSubmissions: userKycSubmissions,
+  } = isolatedAccountView;
 
-  const userWallet = useMemo(
-    () => calculateUserWalletMetrics(userTransactions, userInvestments),
-    [userTransactions, userInvestments],
-  );
+  const pendingVerificationCode = useMemo(() => {
+    if (!authenticatedUser) return null;
+    return state.verificationCodes[authenticatedUser.email.toLowerCase()] ?? null;
+  }, [authenticatedUser, state.verificationCodes]);
 
-  const userReferrals = useMemo(
-    () => (activeAccountId ? state.referrals.filter((r) => r.referrerId === activeAccountId) : []),
-    [state.referrals, activeAccountId],
-  );
-
-  const userNotifications = useMemo(
-    () =>
-      activeAccountId
-        ? state.notifications
-            .filter((n) => n.userId === activeAccountId || n.userId === "ALL")
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        : [],
-    [state.notifications, activeAccountId],
-  );
-
-  const unreadNotificationCount = useMemo(
-    () => userNotifications.filter((n) => !n.read).length,
-    [userNotifications],
-  );
+  const pendingTwoFactorCode = useMemo(() => {
+    if (!authenticatedUser) return null;
+    return state.twoFactorCodes[authenticatedUser.id] ?? null;
+  }, [authenticatedUser, state.twoFactorCodes]);
 
   const appendAudit = (
     prev: PersistedState,
@@ -115,13 +137,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
     const normalized = email.trim().toLowerCase();
     const matched = state.users.find((u) => u.email.toLowerCase() === normalized);
-    const expectedPassword = matched?.password ?? "silverspoon2026";
 
-    if (!matched || password !== expectedPassword) {
+    if (!matched || !matched.password || password !== matched.password) {
       return {
         ok: false,
-        error:
-          "Invalid email address or password. Verify your credentials or use a Demo Workspace button below.",
+        error: "Invalid email address or password. Verify your credentials or open a new account.",
       };
     }
 
@@ -198,6 +218,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         accountNumber: "",
         accountName: payload.fullName.trim().toUpperCase(),
         verified: false,
+        verificationStatus: "Unverified",
       },
     };
 
@@ -209,10 +230,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         )
       : undefined;
 
+    const initialVerificationCode = generateNumericCode(6);
+
     setState((prev) => ({
       ...prev,
       session: { authenticated: true, userId: newUser.id, role: "investor" },
       users: [newUser, ...prev.users],
+      verificationCodes: {
+        ...prev.verificationCodes,
+        [emailNormalized]: initialVerificationCode,
+      },
       referrals: referrer
         ? [
             {
@@ -240,7 +267,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             "Your independent Naira wealth account is ready. Complete email verification and fund your wallet to allocate into mandates.",
           category: "platform",
           createdAt: new Date().toISOString(),
-          read: false,
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
@@ -261,50 +288,95 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setState((prev) => ({
       ...prev,
-      session: { ...prev.session, authenticated: false },
+      session: { authenticated: false, userId: "", role: "investor" },
     }));
   };
 
-  const switchRoleDemo = (role: "investor" | "admin") => {
-    const target =
-      role === "investor"
-        ? state.users.find((u) => u.id === "USR-1001") ?? state.users.find((u) => u.role === "investor")
-        : state.users.find((u) => u.role === "admin");
-    if (!target) return;
-    setState((prev) => ({
-      ...prev,
-      session: { authenticated: true, userId: target.id, role: target.role },
-      users: prev.users.map((u) =>
-        u.id === target.id ? { ...u, lastLoginAt: new Date().toISOString() } : u,
-      ),
-    }));
+  // Retained as a safe no-op to preserve PlatformServiceContract compatibility;
+  // seeded demo accounts and demo role switching have been removed.
+  const switchRoleDemo: PlatformServiceContract["switchRoleDemo"] = () => {
+    return;
   };
 
-  const verifyEmail: PlatformServiceContract["verifyEmail"] = (email, code) => {
-    const normalized = email.trim().toLowerCase();
-    const trimmedCode = code.trim();
-    if (!/^\d{6}$/.test(trimmedCode)) {
-      return { ok: false, error: "Enter a valid 6-digit verification code (e.g. 482910)." };
+  const requestVerificationCode: AppStateContextValue["requestVerificationCode"] = () => {
+    if (!authenticatedUser) {
+      return {
+        ok: false,
+        error: "Sign in to your account to request an email verification code.",
+      };
     }
-    const target = state.users.find((u) => u.email.toLowerCase() === normalized);
-    if (!target) {
-      return { ok: false, error: "No account matches that email address." };
+    if (authenticatedUser.emailVerified) {
+      return { ok: false, error: "Your email address is already verified." };
     }
-
-    const updatedUser: UserProfile = { ...target, emailVerified: true };
+    const normalized = authenticatedUser.email.toLowerCase();
+    const code = generateNumericCode(6);
     setState((prev) => ({
       ...prev,
-      users: prev.users.map((u) => (u.id === target.id ? updatedUser : u)),
+      verificationCodes: { ...prev.verificationCodes, [normalized]: code },
       auditLogs: appendAudit(prev, {
-        actorName: target.fullName,
-        actorRole: target.role,
-        action: "EMAIL_VERIFIED",
+        actorName: authenticatedUser.fullName,
+        actorRole: authenticatedUser.role,
+        action: "EMAIL_VERIFICATION_CODE_ISSUED",
         targetType: "Security",
-        targetId: target.id,
-        summary: `Simulated email address verification completed for ${target.email}.`,
+        targetId: authenticatedUser.id,
+        summary: `Issued simulated 6-digit email verification code for ${authenticatedUser.email}.`,
         severity: "Info",
       }),
     }));
+    return { ok: true, data: { code } };
+  };
+
+  const verifyEmail: PlatformServiceContract["verifyEmail"] = (email, code) => {
+    if (!authenticatedUser) {
+      return {
+        ok: false,
+        error: "Sign in to your account before verifying your email address.",
+      };
+    }
+    const normalized = email.trim().toLowerCase();
+    if (authenticatedUser.email.toLowerCase() !== normalized) {
+      return {
+        ok: false,
+        error: "You can only verify the email address belonging to your signed-in account.",
+      };
+    }
+    const trimmedCode = code.trim();
+    if (!/^\d{6}$/.test(trimmedCode)) {
+      return { ok: false, error: "Enter a valid 6-digit verification code." };
+    }
+    const expectedCode = state.verificationCodes[normalized];
+    if (!expectedCode) {
+      return {
+        ok: false,
+        error: "No active verification code has been issued. Request a verification code first.",
+      };
+    }
+    if (trimmedCode !== expectedCode) {
+      return {
+        ok: false,
+        error: "The verification code does not match the issued code.",
+      };
+    }
+
+    const updatedUser: UserProfile = { ...authenticatedUser, emailVerified: true };
+    setState((prev) => {
+      const nextCodes = { ...prev.verificationCodes };
+      delete nextCodes[normalized];
+      return {
+        ...prev,
+        verificationCodes: nextCodes,
+        users: prev.users.map((u) => (u.id === authenticatedUser.id ? updatedUser : u)),
+        auditLogs: appendAudit(prev, {
+          actorName: authenticatedUser.fullName,
+          actorRole: authenticatedUser.role,
+          action: "EMAIL_VERIFIED",
+          targetType: "Security",
+          targetId: authenticatedUser.id,
+          summary: `Simulated email address verification completed for ${authenticatedUser.email}.`,
+          severity: "Info",
+        }),
+      };
+    });
     return { ok: true, data: updatedUser };
   };
 
@@ -314,7 +386,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!target) {
       return { ok: false, error: "No registered account was found with that email address." };
     }
-    const resetToken = `SS-${Math.floor(100000 + Math.random() * 899999)}`;
+    const resetToken = generateRecoveryToken();
     setState((prev) => ({
       ...prev,
       resetTokens: { ...prev.resetTokens, [normalized]: resetToken },
@@ -338,10 +410,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "Account not found for the specified email." };
     }
     const expectedToken = state.resetTokens[normalized];
-    if (!token.trim() || (expectedToken && token.trim() !== expectedToken && token.trim().length < 6)) {
-      return { ok: false, error: "Invalid or expired recovery token." };
+    const trimmedToken = token.trim();
+    if (!expectedToken) {
+      return {
+        ok: false,
+        error: "No active recovery token exists for this account. Request a recovery token first.",
+      };
     }
-    if (expectedToken && token.trim() !== expectedToken) {
+    if (!trimmedToken || trimmedToken !== expectedToken) {
       return { ok: false, error: "The recovery token does not match the issued code." };
     }
     if (newPassword.length < 8) {
@@ -365,7 +441,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             message: "Your simulated account password was updated via recovery reset.",
             category: "security",
             createdAt: new Date().toISOString(),
-            read: false,
+            readByUserIds: [],
           },
           ...prev.notifications,
         ],
@@ -390,8 +466,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!authenticatedUser) {
       return { ok: false, error: "You must be signed in to update your password." };
     }
-    const expected = authenticatedUser.password ?? "silverspoon2026";
-    if (currentPassword !== expected) {
+    if (!authenticatedUser.password || currentPassword !== authenticatedUser.password) {
       return { ok: false, error: "Current password is incorrect." };
     }
     if (newPassword.length < 8) {
@@ -414,7 +489,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           message: "Your SILVER SPOON password was changed in Account Security Settings.",
           category: "security",
           createdAt: new Date().toISOString(),
-          read: false,
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
@@ -431,16 +506,156 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   };
 
+  const requestTwoFactorChallenge: AppStateContextValue["requestTwoFactorChallenge"] = (
+    purpose = "security action",
+  ) => {
+    if (!authenticatedUser) {
+      return { ok: false, error: "Sign in to request a simulated 2FA confirmation code." };
+    }
+    const code = generateNumericCode(6);
+    setState((prev) => ({
+      ...prev,
+      twoFactorCodes: { ...prev.twoFactorCodes, [authenticatedUser.id]: code },
+      auditLogs: appendAudit(prev, {
+        actorName: authenticatedUser.fullName,
+        actorRole: authenticatedUser.role,
+        action: "TWO_FACTOR_CHALLENGE_ISSUED",
+        targetType: "Security",
+        targetId: authenticatedUser.id,
+        summary: `Issued simulated 6-digit 2FA confirmation code for ${purpose}.`,
+        severity: "Info",
+      }),
+    }));
+    return { ok: true, data: { code } };
+  };
+
+  const enableTwoFactor: AppStateContextValue["enableTwoFactor"] = (code) => {
+    if (!authenticatedUser) {
+      return { ok: false, error: "Sign in to configure two-factor authentication." };
+    }
+    if (authenticatedUser.twoFactorEnabled) {
+      return { ok: false, error: "Simulated two-factor authentication is already enabled." };
+    }
+    const trimmed = code.trim();
+    if (!/^\d{6}$/.test(trimmed)) {
+      return { ok: false, error: "Enter the 6-digit simulated confirmation code." };
+    }
+    const expected = state.twoFactorCodes[authenticatedUser.id];
+    if (!expected) {
+      return {
+        ok: false,
+        error: "No active 2FA setup code was issued. Generate a code first.",
+      };
+    }
+    if (trimmed !== expected) {
+      return { ok: false, error: "The 2FA confirmation code does not match the issued code." };
+    }
+
+    setState((prev) => {
+      const nextCodes = { ...prev.twoFactorCodes };
+      delete nextCodes[authenticatedUser.id];
+      return {
+        ...prev,
+        twoFactorCodes: nextCodes,
+        users: prev.users.map((u) =>
+          u.id === authenticatedUser.id ? { ...u, twoFactorEnabled: true } : u,
+        ),
+        notifications: [
+          {
+            id: generateId("NTF"),
+            userId: authenticatedUser.id,
+            title: "Simulated 2FA Enabled",
+            message:
+              "Withdrawal requests now require a simulated 6-digit confirmation code before submission.",
+            category: "security",
+            createdAt: new Date().toISOString(),
+            readByUserIds: [],
+          },
+          ...prev.notifications,
+        ],
+        auditLogs: appendAudit(prev, {
+          actorName: authenticatedUser.fullName,
+          actorRole: authenticatedUser.role,
+          action: "TWO_FACTOR_ENABLED",
+          targetType: "Security",
+          targetId: authenticatedUser.id,
+          summary: `Enabled simulated 2FA withdrawal confirmation for ${authenticatedUser.email}.`,
+          severity: "Review",
+        }),
+      };
+    });
+    return { ok: true };
+  };
+
+  const disableTwoFactor: AppStateContextValue["disableTwoFactor"] = (currentPassword) => {
+    if (!authenticatedUser) {
+      return { ok: false, error: "Sign in to update two-factor authentication." };
+    }
+    if (!authenticatedUser.twoFactorEnabled) {
+      return { ok: false, error: "Simulated two-factor authentication is already disabled." };
+    }
+    if (
+      !authenticatedUser.password ||
+      !currentPassword.trim() ||
+      currentPassword !== authenticatedUser.password
+    ) {
+      return {
+        ok: false,
+        error: "Current password is incorrect. Password confirmation is required to disable 2FA.",
+      };
+    }
+
+    setState((prev) => {
+      const nextCodes = { ...prev.twoFactorCodes };
+      delete nextCodes[authenticatedUser.id];
+      return {
+        ...prev,
+        twoFactorCodes: nextCodes,
+        users: prev.users.map((u) =>
+          u.id === authenticatedUser.id ? { ...u, twoFactorEnabled: false } : u,
+        ),
+        notifications: [
+          {
+            id: generateId("NTF"),
+            userId: authenticatedUser.id,
+            title: "Simulated 2FA Disabled",
+            message: "Simulated two-factor withdrawal confirmation was turned off in Account Settings.",
+            category: "security",
+            createdAt: new Date().toISOString(),
+            readByUserIds: [],
+          },
+          ...prev.notifications,
+        ],
+        auditLogs: appendAudit(prev, {
+          actorName: authenticatedUser.fullName,
+          actorRole: authenticatedUser.role,
+          action: "TWO_FACTOR_DISABLED",
+          targetType: "Security",
+          targetId: authenticatedUser.id,
+          summary: `Disabled simulated 2FA safeguard for ${authenticatedUser.email}.`,
+          severity: "Review",
+        }),
+      };
+    });
+    return { ok: true };
+  };
+
   // ── Investor Financial Actions (Strictly scoped to authenticated investor) ──
 
   const createDeposit: PlatformServiceContract["createDeposit"] = (input: DepositInput) => {
     if (!authenticatedUser || authenticatedUser.role !== "investor") {
       return { ok: false, error: "Sign in with an investor account to initiate deposits." };
     }
-    const validation = validateDeposit(input, state.settings);
+    const investor = authenticatedUser;
+    if (investor.status === "Suspended") {
+      return {
+        ok: false,
+        error: "This account is suspended and cannot initiate deposits. Contact compliance support.",
+      };
+    }
+    const validation = validateDeposit(input, state.settings, investor);
     if (!validation.ok) return { ok: false, error: validation.error };
 
-    const investor = authenticatedUser;
     const autoApprove = input.amount <= state.settings.autoApproveDepositsUnder;
     const status: TransactionStatus = autoApprove ? "Completed" : "Pending";
 
@@ -471,7 +686,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             : `${formatNaira(input.amount)} via ${input.channel} is pending treasury confirmation.`,
           category: "deposit",
           createdAt: txn.createdAt,
-          read: false,
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
@@ -494,13 +709,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "Sign in with an investor account to request withdrawals." };
     }
     const investor = authenticatedUser;
+    if (investor.status === "Suspended") {
+      return {
+        ok: false,
+        error: "This account is suspended and cannot request withdrawals. Contact compliance support.",
+      };
+    }
     const validation = validateWithdrawal(
       input,
       userWallet.availableBalance,
       investor,
       state.settings,
+      userTransactions,
     );
     if (!validation.ok) return { ok: false, error: validation.error };
+
+    if (investor.twoFactorEnabled) {
+      const expectedCode = state.twoFactorCodes[investor.id];
+      const submittedCode = input.twoFactorCode?.trim() ?? "";
+      if (!expectedCode) {
+        return {
+          ok: false,
+          error:
+            "Simulated 2FA confirmation is enabled on this account. Request and enter a 6-digit confirmation code to continue.",
+        };
+      }
+      if (submittedCode !== expectedCode) {
+        return {
+          ok: false,
+          error: "Invalid simulated 2FA confirmation code. Check the issued 6-digit code and try again.",
+        };
+      }
+    }
 
     const fee = validation.data?.fee ?? 0;
     const channel = `${investor.bankAccount.bankName} ${maskAccountNumber(investor.bankAccount.accountNumber)}`;
@@ -514,31 +754,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       note: input.note?.trim() || "Simulated payout request awaiting treasury review",
     });
 
-    setState((prev) => ({
-      ...prev,
-      transactions: [txn, ...prev.transactions],
-      notifications: [
-        {
-          id: generateId("NTF"),
-          userId: investor.id,
-          title: "Withdrawal Request Submitted",
-          message: `Your withdrawal request of ${formatNaira(input.amount)} to ${channel} is pending review.`,
-          category: "withdrawal",
-          createdAt: txn.createdAt,
-          read: false,
-        },
-        ...prev.notifications,
-      ],
-      auditLogs: appendAudit(prev, {
-        actorName: investor.fullName,
-        actorRole: "investor",
-        action: "WITHDRAWAL_REQUESTED",
-        targetType: "Withdrawal",
-        targetId: txn.id,
-        summary: `Requested withdrawal of ${formatNaira(input.amount)} to ${channel}.`,
-        severity: "Review",
-      }),
-    }));
+    setState((prev) => {
+      const nextTwoFactorCodes = { ...prev.twoFactorCodes };
+      if (investor.twoFactorEnabled) {
+        delete nextTwoFactorCodes[investor.id];
+      }
+      return {
+        ...prev,
+        twoFactorCodes: nextTwoFactorCodes,
+        transactions: [txn, ...prev.transactions],
+        notifications: [
+          {
+            id: generateId("NTF"),
+            userId: investor.id,
+            title: "Withdrawal Request Submitted",
+            message: `Your withdrawal request of ${formatNaira(input.amount)} to ${channel} is pending review.`,
+            category: "withdrawal",
+            createdAt: txn.createdAt,
+            readByUserIds: [],
+          },
+          ...prev.notifications,
+        ],
+        auditLogs: appendAudit(prev, {
+          actorName: investor.fullName,
+          actorRole: "investor",
+          action: "WITHDRAWAL_REQUESTED",
+          targetType: "Withdrawal",
+          targetId: txn.id,
+          summary: `Requested withdrawal of ${formatNaira(input.amount)} to ${channel}${investor.twoFactorEnabled ? " (confirmed via simulated 2FA)" : ""}.`,
+          severity: "Review",
+        }),
+      };
+    });
 
     return { ok: true, data: txn };
   };
@@ -550,8 +797,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "Sign in with an investor account to allocate investments." };
     }
     const investor = authenticatedUser;
+    if (investor.status === "Suspended") {
+      return {
+        ok: false,
+        error:
+          "This account is suspended and cannot subscribe to investment mandates. Contact compliance support.",
+      };
+    }
     const plan = state.plans.find((p) => p.id === input.planId);
-    const validation = validateInvestmentSubscription(input, plan, userWallet.availableBalance);
+    const validation = validateInvestmentSubscription(
+      input,
+      plan,
+      userWallet.availableBalance,
+      investor,
+    );
     if (!validation.ok || !plan) return { ok: false, error: validation.error };
 
     const investment = buildInvestmentRecord(investor, plan, input.amount, input.autoCompound);
@@ -628,7 +887,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               message: `${investor.fullName} completed a qualifying allocation of ${formatNaira(input.amount)}. ${formatNaira(commissionEarned)} (${pendingReferral.commissionRatePercent}%) has been credited to your wallet.`,
               category: "referral",
               createdAt: investment.startedAt,
-              read: false,
+              readByUserIds: [],
             },
           ];
 
@@ -663,7 +922,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             message: `Allocated ${formatNaira(input.amount)} into ${plan.name} (${plan.durationDays} days).`,
             category: "investment",
             createdAt: investment.startedAt,
-            read: false,
+            readByUserIds: [],
           },
           ...extraNotifs,
           ...prev.notifications,
@@ -709,6 +968,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const updateProfile: PlatformServiceContract["updateProfile"] = (updates) => {
     if (!authenticatedUser) return { ok: false, error: "Not authenticated." };
+    if ("twoFactorEnabled" in updates) {
+      return {
+        ok: false,
+        error: "Use the Two-Factor Authentication enrollment or disable flow to change 2FA settings.",
+      };
+    }
     setState((prev) => ({
       ...prev,
       users: prev.users.map((u) => (u.id === authenticatedUser.id ? { ...u, ...updates } : u)),
@@ -720,34 +985,125 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     bank: BankAccountDetails,
   ) => {
     if (!authenticatedUser) return { ok: false, error: "Not authenticated." };
-    if (!/^\d{10}$/.test(bank.accountNumber)) {
-      return { ok: false, error: "Nigerian NUBAN account numbers must be exactly 10 digits." };
-    }
-    if (!bank.accountName.trim()) {
-      return { ok: false, error: "Enter the legal account holder name." };
-    }
+    const validation = validateBankAccountDetails(bank, authenticatedUser);
+    if (!validation.ok) return { ok: false, error: validation.error };
+
+    const now = new Date().toISOString();
+    const sanitizedBank: BankAccountDetails = {
+      bankCode: bank.bankCode.trim(),
+      bankName: bank.bankName.trim(),
+      accountNumber: bank.accountNumber.trim(),
+      accountName: bank.accountName.trim().toUpperCase(),
+      // Client-side format validation only; never falsely claim external NIBSS/Paystack verification.
+      verified: false,
+      verificationStatus: "Pending Verification",
+      updatedAt: now,
+    };
+
     setState((prev) => ({
       ...prev,
       users: prev.users.map((u) =>
-        u.id === authenticatedUser.id ? { ...u, bankAccount: { ...bank, verified: true } } : u,
+        u.id === authenticatedUser.id ? { ...u, bankAccount: sanitizedBank } : u,
       ),
+      notifications: [
+        {
+          id: generateId("NTF"),
+          userId: authenticatedUser.id,
+          title: "Settlement Bank Account Saved",
+          message: `Saved ${sanitizedBank.bankName} (${maskAccountNumber(sanitizedBank.accountNumber)}). Live NIBSS name-enquiry verification is pending backend integration.`,
+          category: "security",
+          createdAt: now,
+          readByUserIds: [],
+        },
+        ...prev.notifications,
+      ],
       auditLogs: appendAudit(prev, {
         actorName: authenticatedUser.fullName,
         actorRole: authenticatedUser.role,
         action: "BANK_ACCOUNT_UPDATED",
         targetType: "User",
         targetId: authenticatedUser.id,
-        summary: `Updated payout NUBAN account (${bank.bankName} ${maskAccountNumber(bank.accountNumber)}).`,
-        severity: "Info",
+        summary: `Saved settlement NUBAN account (${sanitizedBank.bankName} ${maskAccountNumber(sanitizedBank.accountNumber)}) — status set to Pending Verification.`,
+        severity: "Review",
       }),
     }));
     return { ok: true };
   };
 
-  const markNotificationRead = (id: string) => {
+  const submitKycApplication: AppStateContextValue["submitKycApplication"] = (
+    input: KycSubmissionInput,
+  ) => {
+    if (!authenticatedUser || authenticatedUser.role !== "investor") {
+      return { ok: false, error: "Sign in with an investor account to submit KYC documents." };
+    }
+    const validation = validateKycSubmission(input, authenticatedUser, state.kycSubmissions);
+    if (!validation.ok) return { ok: false, error: validation.error };
+
+    const now = new Date().toISOString();
+    const record: KycSubmissionRecord = {
+      id: generateId("KYC"),
+      userId: authenticatedUser.id,
+      targetTier: input.targetTier,
+      idType: input.idType,
+      idNumberLast4: input.idNumber.trim().slice(-4),
+      bvnLast4: input.bvn.trim().slice(-4),
+      dateOfBirth: input.dateOfBirth,
+      residentialAddress: input.residentialAddress.trim(),
+      idDocumentName: input.idDocumentName.trim(),
+      proofOfAddressName: input.proofOfAddressName?.trim() || undefined,
+      submittedAt: now,
+      status: "Under Review",
+    };
+
+    const nextAccountStatus: AccountStatus =
+      authenticatedUser.kycLevel === "Tier 1" ? "Pending KYC" : authenticatedUser.status;
+    const submissionSummary = `Simulated ${input.targetTier} KYC package submitted (${input.idType} ••••${record.idNumberLast4}, BVN ••••${record.bvnLast4}) — awaiting compliance review in Admin Console.`;
+
     setState((prev) => ({
       ...prev,
-      notifications: prev.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      kycSubmissions: [record, ...prev.kycSubmissions],
+      users: prev.users.map((u) =>
+        u.id === authenticatedUser.id
+          ? {
+              ...u,
+              address: input.residentialAddress.trim(),
+              status: nextAccountStatus,
+              kycNote: submissionSummary,
+              kycUpdatedAt: now,
+            }
+          : u,
+      ),
+      notifications: [
+        {
+          id: generateId("NTF"),
+          userId: authenticatedUser.id,
+          title: `KYC Submission Received (${input.targetTier})`,
+          message: `Your simulated ${input.targetTier} compliance application (${record.id}) has been queued for review.`,
+          category: "security",
+          createdAt: now,
+          readByUserIds: [],
+        },
+        ...prev.notifications,
+      ],
+      auditLogs: appendAudit(prev, {
+        actorName: authenticatedUser.fullName,
+        actorRole: "investor",
+        action: "KYC_SUBMISSION_RECEIVED",
+        targetType: "User",
+        targetId: authenticatedUser.id,
+        summary: `Submitted simulated ${input.targetTier} KYC application (${record.id}) with ${input.idType} and BVN ending ${record.bvnLast4}.`,
+        severity: "Review",
+      }),
+    }));
+
+    return { ok: true, data: record };
+  };
+
+  const markNotificationRead = (id: string) => {
+    if (!activeAccountId) return;
+    setState((prev) => ({
+      ...prev,
+      notifications: markNotificationReadForUser(prev.notifications, id, activeAccountId),
     }));
   };
 
@@ -755,9 +1111,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!activeAccountId) return;
     setState((prev) => ({
       ...prev,
-      notifications: prev.notifications.map((n) =>
-        n.userId === activeAccountId || n.userId === "ALL" ? { ...n, read: true } : n,
-      ),
+      notifications: markAllNotificationsReadForUser(prev.notifications, activeAccountId),
     }));
   };
 
@@ -804,7 +1158,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           message: `Your ${target.type.toLowerCase()} of ${formatNaira(target.amount)} (${target.reference}) was marked ${status.toLowerCase()}.${reviewNote ? ` Note: ${reviewNote}` : ""}`,
           category: target.type === "Deposit" ? "deposit" : "withdrawal",
           createdAt: new Date().toISOString(),
-          read: false,
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
@@ -826,52 +1180,83 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!admin) return { ok: false, error: "Administrator role required." };
     const inv = state.investments.find((i) => i.id === investmentId);
     if (!inv) return { ok: false, error: "Investment not found." };
-    if (inv.status !== "Active") return { ok: false, error: "Only active investments can be matured." };
 
     const investor = state.users.find((u) => u.id === inv.userId);
-    if (!investor) return { ok: false, error: "Investor record missing." };
+    const plan = state.plans.find((p) => p.id === inv.planId);
 
-    const realizedReturn = inv.projectedReturn;
-    const payoutTxn = buildTransactionRecord({
-      user: investor,
-      type: "Realized Return",
-      amount: realizedReturn,
-      status: "Completed",
-      channel: inv.planName,
-      note: `Simulated maturity settlement for ${inv.id}`,
-      reviewedBy: admin.fullName,
+    const bundleResult = buildMaturitySettlementBundle({
+      investment: inv,
+      plan,
+      investor,
+      adminName: admin.fullName,
+      existingTransactions: state.transactions,
     });
+    if (!bundleResult.ok || !bundleResult.data || !investor) {
+      return { ok: false, error: bundleResult.error ?? "Unable to settle investment." };
+    }
+
+    const {
+      maturedInvestment,
+      realizedReturn,
+      payoutTransaction,
+      rolloverInvestment,
+      rolloverTransaction,
+      rolloverSkippedReason,
+    } = bundleResult.data;
+
+    const notifMessage = rolloverInvestment
+      ? `${inv.planName} (${inv.id}) matured with ${formatNaira(realizedReturn)} realized return. Auto-compound rolled over ${formatNaira(rolloverInvestment.principal)} into new Cycle #${rolloverInvestment.rolloverCycle ?? 2} (${rolloverInvestment.id}).`
+      : rolloverSkippedReason && inv.autoCompound
+        ? `${inv.planName} (${inv.id}) matured. Principal (${formatNaira(inv.principal)}) and realized return (${formatNaira(realizedReturn)}) were credited to Available Balance because auto-compound could not run: ${rolloverSkippedReason}`
+        : `${inv.planName} (${inv.id}) matured. Principal of ${formatNaira(inv.principal)} returned to available balance with ${formatNaira(realizedReturn)} realized return.`;
 
     setState((prev) => ({
       ...prev,
-      investments: prev.investments.map((i) =>
-        i.id === investmentId ? { ...i, status: "Matured", accruedReturn: realizedReturn } : i,
-      ),
-      transactions: [payoutTxn, ...prev.transactions],
+      investments: [
+        ...(rolloverInvestment ? [rolloverInvestment] : []),
+        ...prev.investments.map((i) => (i.id === investmentId ? maturedInvestment : i)),
+      ],
+      transactions: [
+        ...(rolloverTransaction ? [rolloverTransaction] : []),
+        payoutTransaction,
+        ...prev.transactions,
+      ],
       notifications: [
         {
           id: generateId("NTF"),
           userId: investor.id,
-          title: "Investment Mandate Matured",
-          message: `${inv.planName} (${inv.id}) matured. Principal of ${formatNaira(inv.principal)} returned to available balance with ${formatNaira(realizedReturn)} realized return.`,
+          title: rolloverInvestment
+            ? "Investment Matured & Auto-Compounded"
+            : "Investment Mandate Matured",
+          message: notifMessage,
           category: "investment",
-          createdAt: new Date().toISOString(),
-          read: false,
+          createdAt: maturedInvestment.settledAt ?? new Date().toISOString(),
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
       auditLogs: appendAudit(prev, {
         actorName: admin.fullName,
         actorRole: "admin",
-        action: "INVESTMENT_MATURED",
+        action: rolloverInvestment ? "INVESTMENT_MATURED_AND_ROLLED_OVER" : "INVESTMENT_MATURED",
         targetType: "Investment",
         targetId: inv.id,
-        summary: `Matured ${inv.id} for ${inv.userName}; credited ${formatNaira(realizedReturn)} realized return.`,
+        summary: rolloverInvestment
+          ? `Matured ${inv.id} for ${inv.userName} (+${formatNaira(realizedReturn)}) and auto-compounded ${formatNaira(rolloverInvestment.principal)} into ${rolloverInvestment.id}.`
+          : `Matured ${inv.id} for ${inv.userName}; credited ${formatNaira(realizedReturn)} realized return to available balance.${rolloverSkippedReason && inv.autoCompound ? ` Rollover skipped: ${rolloverSkippedReason}` : ""}`,
         severity: "Info",
       }),
     }));
 
-    return { ok: true, data: { realizedReturn } };
+    return {
+      ok: true,
+      data: {
+        realizedReturn,
+        rolledOverInvestmentId: rolloverInvestment?.id,
+        rolloverPrincipal: rolloverInvestment?.principal,
+        rolloverSkippedReason,
+      },
+    };
   };
 
   const adminUpdateUserStatus: PlatformServiceContract["adminUpdateUserStatus"] = (
@@ -931,11 +1316,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const kycNote =
       decision.note?.trim() ||
       (decision.status === "Active"
-        ? `KYC approved at ${decision.kycLevel} by ${admin.fullName}.`
+        ? `KYC approved at ${decision.kycLevel} by ${admin.fullName} (simulated review).`
         : `KYC status updated to ${decision.status} (${decision.kycLevel}).`);
+
+    const tierRank: Record<UserProfile["kycLevel"], number> = {
+      "Tier 1": 1,
+      "Tier 2": 2,
+      "Tier 3": 3,
+    };
 
     setState((prev) => ({
       ...prev,
+      kycSubmissions: prev.kycSubmissions.map((sub) => {
+        if (sub.userId !== userId || sub.status !== "Under Review") return sub;
+        const approved =
+          decision.status === "Active" &&
+          tierRank[decision.kycLevel] >= tierRank[sub.targetTier];
+        return {
+          ...sub,
+          status: approved ? "Approved" : "Needs Resubmission",
+          reviewerNote: kycNote,
+          reviewedAt: now,
+          reviewedBy: admin.fullName,
+        };
+      }),
       users: prev.users.map((u) =>
         u.id === userId
           ? {
@@ -955,7 +1359,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           message: `Your compliance status is now ${decision.status} (${decision.kycLevel}). ${kycNote}`,
           category: "security",
           createdAt: now,
-          read: false,
+          readByUserIds: [],
         },
         ...prev.notifications,
       ],
@@ -967,6 +1371,58 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         targetId: userId,
         summary: `Reviewed KYC for ${target.fullName}: ${decision.status} · ${decision.kycLevel}. ${kycNote}`,
         severity: decision.status === "Active" ? "Info" : "Review",
+      }),
+    }));
+    return { ok: true };
+  };
+
+  const adminVerifyUserBankAccount: AppStateContextValue["adminVerifyUserBankAccount"] = (
+    userId,
+  ) => {
+    const admin = requireAdminActor();
+    if (!admin) return { ok: false, error: "Administrator role required." };
+    const target = state.users.find((u) => u.id === userId);
+    if (!target) return { ok: false, error: "User not found." };
+    if (!/^\d{10}$/.test(target.bankAccount.accountNumber)) {
+      return { ok: false, error: "Client has not saved a valid 10-digit NUBAN account yet." };
+    }
+
+    const now = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      users: prev.users.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              bankAccount: {
+                ...u.bankAccount,
+                verified: true,
+                verificationStatus: "Simulated Verified",
+                updatedAt: now,
+              },
+            }
+          : u,
+      ),
+      notifications: [
+        {
+          id: generateId("NTF"),
+          userId: target.id,
+          title: "Settlement Bank Account Reviewed (Simulated)",
+          message: `Your ${target.bankAccount.bankName} account (${maskAccountNumber(target.bankAccount.accountNumber)}) has been marked Simulated Verified by operations.`,
+          category: "security",
+          createdAt: now,
+          readByUserIds: [],
+        },
+        ...prev.notifications,
+      ],
+      auditLogs: appendAudit(prev, {
+        actorName: admin.fullName,
+        actorRole: "admin",
+        action: "BANK_ACCOUNT_SIMULATED_VERIFIED",
+        targetType: "User",
+        targetId: userId,
+        summary: `Marked settlement bank account (${target.bankAccount.bankName} ${maskAccountNumber(target.bankAccount.accountNumber)}) as Simulated Verified.`,
+        severity: "Info",
       }),
     }));
     return { ok: true };
@@ -1073,7 +1529,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       message: payload.message.trim(),
       category: payload.category as NotificationCategory,
       createdAt: new Date().toISOString(),
-      read: false,
+      readByUserIds: [],
     };
 
     setState((prev) => ({
@@ -1095,6 +1551,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const adminUpdateSettings: PlatformServiceContract["adminUpdateSettings"] = (updates) => {
     const admin = requireAdminActor();
     if (!admin) return { ok: false, error: "Administrator role required." };
+    const candidate = { ...state.settings, ...updates };
+    const validation = validatePlatformSettings(candidate);
+    if (!validation.ok) {
+      return { ok: false, error: validation.error };
+    }
     setState((prev) => ({
       ...prev,
       settings: { ...prev.settings, ...updates },
@@ -1166,7 +1627,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               message: `${formatNaira(payoutAmount)} referral commission for ${ref.referredUserName} has been credited to your available balance.`,
               category: "referral",
               createdAt: new Date().toISOString(),
-              read: false,
+              readByUserIds: [],
             },
             ...prev.notifications,
           ]
@@ -1185,17 +1646,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   };
 
   const resetDemoState = () => {
-    const keepAdmin = authenticatedUser?.role === "admin";
     const fresh = mockDataProvider.clearSnapshot();
-    const adminSeed = fresh.users.find((u) => u.role === "admin");
-    setState(
-      keepAdmin && adminSeed
-        ? {
-            ...fresh,
-            session: { authenticated: true, userId: adminSeed.id, role: "admin" },
-          }
-        : fresh,
-    );
+    setState(fresh);
     setResetVersion((v) => v + 1);
   };
 
@@ -1212,12 +1664,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     notifications: state.notifications,
     auditLogs: state.auditLogs,
     settings: state.settings,
+    kycSubmissions: state.kycSubmissions,
     userWallet,
     userTransactions,
     userInvestments,
     userReferrals,
     userNotifications,
+    userKycSubmissions,
     unreadNotificationCount,
+    pendingVerificationCode,
+    pendingTwoFactorCode,
+    requestVerificationCode,
+    requestTwoFactorChallenge,
+    enableTwoFactor,
+    disableTwoFactor,
+    submitKycApplication,
+    adminVerifyUserBankAccount,
     login,
     register,
     logout,

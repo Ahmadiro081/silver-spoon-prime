@@ -1,4 +1,4 @@
-import type { FaqItem, TestimonialItem } from "@/types/domain";
+import type { FaqItem } from "@/types/domain";
 
 export interface PublicStatItem {
   value: string;
@@ -6,47 +6,50 @@ export interface PublicStatItem {
   detail: string;
 }
 
+export interface GovernancePillarItem {
+  id: string;
+  label: string;
+  title: string;
+  description: string;
+  metric: string;
+}
+
 /**
- * Static public-facing editorial content and illustrative showcase figures.
- * Kept separate from transactional mock seed records (`mockDatabase.ts`).
+ * Static public-facing product parameters and editorial governance content.
+ * Contains no preloaded client identities, fabricated AUM metrics, or
+ * sample investor financial figures.
  */
 export const PUBLIC_STATS: PublicStatItem[] = [
-  { value: "₦4.89B", label: "Simulated Assets Under Administration", detail: "Q4 2026 Ledger Snapshot" },
-  { value: "12,640", label: "Active Client Accounts", detail: "Lagos · Abuja · Port Harcourt" },
-  { value: "4 Mandates", label: "Structured Naira Portfolios", detail: "30 to 365 Day Tenors" },
   { value: "₦50,000", label: "Entry Allocation Minimum", detail: "Zero Account Maintenance Fee" },
+  { value: "4 Mandates", label: "Structured Naira Portfolios", detail: "Treasury, Income, Credit & Heritage" },
+  { value: "30 – 365 Days", label: "Defined Mandate Tenors", detail: "Clear Maturity & Payout Schedules" },
+  { value: "3.0%", label: "Qualifying Referral Share", detail: "Ledger-Tracked Commission Payouts" },
 ];
 
-export const TESTIMONIALS: TestimonialItem[] = [
+export const GOVERNANCE_PILLARS: GovernancePillarItem[] = [
   {
-    id: "t1",
-    name: "Ngozi Achebe",
-    role: "Managing Director",
-    organization: "Meridian Foods Nigeria Ltd.",
-    city: "Lagos",
-    outcome: "Consolidated ₦18M in seasonal treasury reserves across 90-day mandates",
-    quote:
-      "We moved our idle quarterly supplier reserves into SILVER SPOON's Platinum Fixed Income mandate. Every maturity schedule, risk disclosure, and ledger entry is clear enough for our external auditors.",
+    id: "gov-1",
+    label: "Ledger Accounting",
+    title: "Single-Source Derived Balances",
+    description:
+      "Every available balance, active allocation, and realized distribution is computed directly from recorded ledger entries so statements reconcile cleanly.",
+    metric: "100% Ledger-Derived",
   },
   {
-    id: "t2",
-    name: "Kunle Adebayo",
-    role: "Principal Software Architect",
-    organization: "PayGrid Systems",
-    city: "Abuja",
-    outcome: "Structured monthly Naira allocations with zero spreadsheet tracking",
-    quote:
-      "Most investment apps hide behind vague return promises. SILVER SPOON treats me like an adult — clear risk bands, honest projections, and an uncluttered wallet ledger.",
+    id: "gov-2",
+    label: "Mandate Clarity",
+    title: "Explicit Risk Bands & Lock-In Horizons",
+    description:
+      "Each Naira mandate discloses target projections, fee schedules, underlying instrument focus, and maturity dates upfront before principal is committed.",
+    metric: "30 · 90 · 180 · 365 Days",
   },
   {
-    id: "t3",
-    name: "Dr. Amara Uche",
-    role: "Chief Medical Director",
-    organization: "Oakbridge Specialist Clinic",
-    city: "Port Harcourt",
-    outcome: "Built a disciplined 180-day capital reserve for medical equipment expansion",
-    quote:
-      "The Sovereign Private Credit reporting gives me complete visibility into lock-in dates and accrued performance while I focus on running my hospital.",
+    id: "gov-3",
+    label: "Access Governance",
+    title: "Account Isolation & KYC Controls",
+    description:
+      "Investor portfolios remain isolated per account with tiered KYC review, two-factor authentication controls, and auditable withdrawal verification.",
+    metric: "Tier 1 – Tier 3 KYC",
   },
 ];
 
@@ -91,7 +94,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "Referrals & Security",
     question: "How are client accounts and financial operations protected in production?",
     answer:
-      "The production architecture is designed around PostgreSQL with Supabase Authentication, strict Row Level Security (RLS), and server-side Edge Functions so all balance mutations, deposit verifications, and payout disbursements are validated on the server.",
+      "The production architecture is designed around PostgreSQL with strict access control, authenticated sessions, and server-side settlement validation so all balance mutations, deposit confirmations, and payout disbursements are verified before settlement.",
   },
   {
     id: "faq-7",

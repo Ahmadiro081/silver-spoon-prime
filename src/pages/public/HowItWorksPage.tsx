@@ -81,15 +81,16 @@ export function HowItWorksPage() {
                   </h2>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground">
+                <fieldset>
+                  <legend className="block text-xs font-medium text-muted-foreground">
                     Choose Investment Mandate
-                  </label>
+                  </legend>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {activePlans.map((plan) => (
                       <button
                         key={plan.id}
                         type="button"
+                        aria-pressed={plan.id === selectedPlan.id}
                         onClick={() => {
                           setSelectedPlanId(plan.id);
                           setAmount(Math.max(plan.minAmount, Math.min(amount, plan.maxAmount)));
@@ -107,7 +108,7 @@ export function HowItWorksPage() {
                       </button>
                     ))}
                   </div>
-                </div>
+                </fieldset>
 
                 <div>
                   <div className="flex items-center justify-between text-xs">
@@ -125,6 +126,7 @@ export function HowItWorksPage() {
                     max={Math.min(selectedPlan.maxAmount, 25_000_000)}
                     step={50_000}
                     value={Math.max(selectedPlan.minAmount, Math.min(amount, Math.min(selectedPlan.maxAmount, 25_000_000)))}
+                    aria-valuetext={formatNaira(amount)}
                     onChange={(e) => setAmount(Number(e.target.value))}
                     className="mt-3 w-full accent-primary"
                   />
@@ -135,7 +137,10 @@ export function HowItWorksPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col justify-between rounded-xl border border-border bg-secondary/40 p-6 lg:col-span-5">
+              <div
+                aria-live="polite"
+                className="flex flex-col justify-between rounded-xl border border-border bg-secondary/40 p-6 lg:col-span-5"
+              >
                 <div className="space-y-4">
                   <p className="text-xs font-medium text-muted-foreground">
                     Illustrative Maturity Projection ({selectedPlan.durationDays} Days)

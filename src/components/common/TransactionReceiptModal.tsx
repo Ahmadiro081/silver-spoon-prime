@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Modal } from "@/components/common/Modal";
 import { StatusText } from "@/components/common/Primitives";
 import type { TransactionRecord } from "@/types/domain";
+import { getTransactionLedgerImpact } from "@/utils/calculations";
 import { formatDateTime, formatNaira } from "@/utils/format";
 
 export function TransactionReceiptModal({
@@ -17,11 +18,11 @@ export function TransactionReceiptModal({
 
   if (!transaction) return null;
 
-  const isInflow =
-    transaction.type === "Deposit" ||
-    transaction.type === "Realized Return" ||
-    transaction.type === "Referral Commission";
-  const netTotal = transaction.amount + transaction.fee;
+  const impact = getTransactionLedgerImpact(transaction);
+  const netImpactFormatted =
+    impact.netWalletImpact === 0
+      ? formatNaira(0, true)
+      : `${impact.netWalletImpact > 0 ? "+" : "-"}${formatNaira(Math.abs(impact.netWalletImpact), true)}`;
 
   const copyReference = async () => {
     try {
@@ -36,32 +37,35 @@ export function TransactionReceiptModal({
 
   const downloadReceipt = () => {
     const lines = [
-      "SILVER SPOON — SIMULATED TRANSACTION RECEIPT",
+      "SILVER SPOON — SIMULATED TRANSACTION RECEIPT (TEST ENVIRONMENT)",
+      "NOT A REAL BANK TRANSACTION — NO REAL FUNDS WERE TRANSFERRED",
       "====================================================",
+      `Ledger Mode:     SIMULATED TRANSACTION (TEST ENVIRONMENT — LOCAL BROWSER DATA)`,
       `Reference:       ${transaction.reference}`,
       `Transaction ID:  ${transaction.id}`,
       `Type:            ${transaction.type}`,
       `Status:          ${transaction.status}`,
       `Account Holder:  ${transaction.userName} (${transaction.userEmail})`,
       `Channel:         ${transaction.channel}`,
-      `Amount:          ${isInflow ? "+" : "-"}${formatNaira(transaction.amount, true)}`,
+      `Amount:          ${impact.sign}${formatNaira(transaction.amount, true)}`,
       `Fee:             ${formatNaira(transaction.fee, true)}`,
-      `Total Impact:    ${isInflow ? "+" : "-"}${formatNaira(netTotal, true)}`,
+      `Wallet Impact:   ${netImpactFormatted} (${impact.impactDescription})`,
       `Created At:      ${formatDateTime(transaction.createdAt)}`,
       `Reviewed At:     ${transaction.reviewedAt ? formatDateTime(transaction.reviewedAt) : "Pending Review"}`,
       `Reviewed By:     ${transaction.reviewedBy ?? "Awaiting Treasury Desk"}`,
       `Narration:       ${transaction.note ?? "—"}`,
       "====================================================",
-      "Notice: Simulated frontend ledger receipt for demonstration purposes only.",
+      "Notice: Simulated frontend ledger receipt generated in a local test environment.",
+      "NOT A REAL BANK TRANSACTION — No NIBSS, Paystack, bank transfer, or real financial settlement occurred.",
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${transaction.reference}.txt`;
+    link.download = `SIMULATED-${transaction.reference}.txt`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success("Downloaded transaction receipt.");
+    toast.success("Downloaded simulated transaction receipt.");
   };
 
   return (
@@ -73,14 +77,29 @@ export function TransactionReceiptModal({
       maxWidthClass="max-w-lg"
     >
       <div className="space-y-5">
+        <div
+          role="note"
+          className="rounded-lg border border-warning/35 bg-warning/10 px-3.5 py-2.5 text-xs text-foreground"
+        >
+          <span className="font-semibold uppercase tracking-wide text-warning">
+            Simulated Transaction · Test Environment:
+          </span>{" "}
+          NOT A REAL BANK TRANSACTION. Local mock ledger entry only — no real bank transfer, NIBSS
+          debit, or live financial settlement took place.
+        </div>
+
         <div className="rounded-xl border border-border bg-secondary/40 p-5 text-center">
-          <p className="text-xs text-muted-foreground">{transaction.type}</p>
+          <p className="text-xs text-muted-foreground">Simulated {transaction.type}</p>
           <p
             className={`font-tabular mt-1.5 text-3xl font-semibold tracking-tight ${
-              isInflow ? "text-success" : "text-foreground"
+              transaction.status === "Declined"
+                ? "text-muted-foreground line-through"
+                : impact.isInflow
+                  ? "text-success"
+                  : "text-foreground"
             }`}
           >
-            {isInflow ? "+" : "-"}
+            {impact.sign}
             {formatNaira(transaction.amount, true)}
           </p>
           <div className="mt-2.5 flex justify-center">
@@ -90,6 +109,10 @@ export function TransactionReceiptModal({
 
         <dl className="divide-y divide-border border-y border-border text-xs">
           <div className="flex items-center justify-between gap-4 py-3">
+            <dt className="text-muted-foreground">Ledger Mode</dt>
+            <dd className="font-semibold text-warning">Simulated Transaction (Test Environment)</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 py-3">
             <dt className="text-muted-foreground">Reference</dt>
             <dd className="flex items-center gap-2">
               <span className="font-tabular font-medium text-foreground">
@@ -98,10 +121,14 @@ export function TransactionReceiptModal({
               <button
                 type="button"
                 onClick={copyReference}
-                aria-label="Copy reference"
-                className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                aria-label="Copy transaction reference"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
               </button>
             </dd>
           </div>
@@ -129,10 +156,14 @@ export function TransactionReceiptModal({
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4 py-3">
-            <dt className="text-muted-foreground">Net Ledger Impact</dt>
-            <dd className="font-tabular font-semibold text-foreground">
-              {isInflow ? "+" : "-"}
-              {formatNaira(netTotal, true)}
+            <dt className="text-muted-foreground">Available Balance Impact</dt>
+            <dd className="text-right">
+              <span className="font-tabular font-semibold text-foreground">
+                {netImpactFormatted}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {impact.impactDescription}
+              </span>
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4 py-3">
@@ -170,15 +201,15 @@ export function TransactionReceiptModal({
           <button
             type="button"
             onClick={downloadReceipt}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap transition-colors hover:bg-secondary"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Download Receipt
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Done
           </button>

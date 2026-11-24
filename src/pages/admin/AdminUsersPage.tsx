@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { Building2, CheckCircle2, Eye, MailWarning, Receipt, Search, ShieldCheck } from "lucide-react";
+import { Building2, CheckCircle2, Eye, MailWarning, Receipt, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
 import {
   MetricCard,
+  SearchInput,
   SegmentedFilter,
   StatusText,
   TableEmptyRow,
 } from "@/components/common/Primitives";
-import { SlideOverDrawer } from "@/components/common/Modal";
+import { ConfirmDialog, SlideOverDrawer } from "@/components/common/Modal";
 import { TransactionReceiptModal } from "@/components/common/TransactionReceiptModal";
 import { useAppState } from "@/context/AppStateContext";
 import type { AccountStatus, TransactionRecord, UserProfile } from "@/types/domain";
@@ -20,14 +21,17 @@ export function AdminUsersPage() {
     users,
     transactions,
     investments,
+    kycSubmissions,
     adminUpdateUserStatus,
     adminUpdateUserTier,
     adminReviewUserKyc,
+    adminVerifyUserBankAccount,
   } = useAppState();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | AccountStatus>("ALL");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedTxn, setSelectedTxn] = useState<TransactionRecord | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<UserProfile | null>(null);
 
   // KYC Drawer form state
   const [kycStatus, setKycStatus] = useState<AccountStatus>("Active");
@@ -57,6 +61,11 @@ export function AdminUsersPage() {
     : [];
   const inspectedInvs = inspectedUser
     ? investments.filter((i) => i.userId === inspectedUser.id)
+    : [];
+  const inspectedKycSubmissions = inspectedUser
+    ? kycSubmissions
+        .filter((s) => s.userId === inspectedUser.id)
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
     : [];
   const inspectedWallet = inspectedUser
     ? calculateUserWalletMetrics(inspectedTxns, inspectedInvs)
@@ -145,17 +154,15 @@ export function AdminUsersPage() {
         </section>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, email, or user ID..."
-              className="h-10 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search name, email, or user ID..."
+            ariaLabel="Search clients by name, email, or user ID"
+            className="w-full max-w-sm"
+          />
           <SegmentedFilter
+            ariaLabel="Filter clients by status"
             value={statusFilter}
             onChange={setStatusFilter}
             options={[
@@ -167,17 +174,35 @@ export function AdminUsersPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite" className="font-tabular">
+            Showing {filtered.length} of {investors.length} investor accounts
+          </p>
+          {(query.trim() || statusFilter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("ALL");
+              }}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Client</th>
-                  <th className="px-6 py-3 font-medium">Tier & KYC</th>
-                  <th className="px-6 py-3 text-right font-medium">Total Balance</th>
-                  <th className="px-6 py-3 text-right font-medium">Active Invested</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Actions</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Client</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Tier & KYC</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Total Balance</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Active Invested</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -186,6 +211,20 @@ export function AdminUsersPage() {
                     colSpan={6}
                     title="No client accounts match your criteria"
                     description="Adjust the status filter or search keyword to inspect investor profiles."
+                    action={
+                      (query.trim() || statusFilter !== "ALL") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuery("");
+                            setStatusFilter("ALL");
+                          }}
+                          className="h-9 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Clear Filters
+                        </button>
+                      ) : undefined
+                    }
                   />
                 ) : (
                   filtered.map((user) => {
@@ -214,7 +253,7 @@ export function AdminUsersPage() {
                               onChange={(e) =>
                                 handleTierChange(user, e.target.value as UserProfile["tier"])
                               }
-                              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
+                              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             >
                               <option value="Silver">Silver</option>
                               <option value="Platinum">Platinum</option>
@@ -240,15 +279,17 @@ export function AdminUsersPage() {
                             <button
                               type="button"
                               onClick={() => openUserDrawer(user)}
+                              aria-label={`Inspect ${user.fullName}`}
                               className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                               Inspect
                             </button>
                             {user.status === "Active" ? (
                               <button
                                 type="button"
-                                onClick={() => handleStatusChange(user, "Suspended")}
+                                onClick={() => setSuspendTarget(user)}
+                                aria-label={`Suspend ${user.fullName}`}
                                 className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
                               >
                                 Suspend
@@ -257,6 +298,7 @@ export function AdminUsersPage() {
                               <button
                                 type="button"
                                 onClick={() => handleStatusChange(user, "Active")}
+                                aria-label={`Activate ${user.fullName}`}
                                 className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                               >
                                 Activate
@@ -296,11 +338,11 @@ export function AdminUsersPage() {
                     <dd>
                       {inspectedUser.emailVerified ? (
                         <span className="inline-flex items-center gap-1 font-medium text-success">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Verified
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Verified
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 font-medium text-warning">
-                          <MailWarning className="h-3.5 w-3.5" /> Unverified
+                          <MailWarning className="h-3.5 w-3.5" aria-hidden="true" /> Unverified
                         </span>
                       )}
                     </dd>
@@ -324,30 +366,63 @@ export function AdminUsersPage() {
 
               <div className="rounded-xl border border-border bg-secondary/30 p-4 text-xs">
                 <p className="flex items-center gap-1.5 font-semibold text-foreground">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                   Settlement Bank Account
                 </p>
                 {inspectedUser.bankAccount.accountNumber ? (
-                  <dl className="mt-3 space-y-2">
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-muted-foreground">Bank</dt>
-                      <dd className="font-medium text-foreground">
-                        {inspectedUser.bankAccount.bankName}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-muted-foreground">Account Name</dt>
-                      <dd className="text-right text-foreground">
-                        {inspectedUser.bankAccount.accountName}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-muted-foreground">NUBAN</dt>
-                      <dd className="font-tabular font-medium text-foreground">
-                        {inspectedUser.bankAccount.accountNumber}
-                      </dd>
-                    </div>
-                  </dl>
+                  <>
+                    <dl className="mt-3 space-y-2">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Bank</dt>
+                        <dd className="font-medium text-foreground">
+                          {inspectedUser.bankAccount.bankName}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Account Name</dt>
+                        <dd className="text-right text-foreground">
+                          {inspectedUser.bankAccount.accountName}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">NUBAN</dt>
+                        <dd className="font-tabular font-medium text-foreground">
+                          {inspectedUser.bankAccount.accountNumber}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Verification</dt>
+                        <dd>
+                          <StatusText
+                            status={
+                              inspectedUser.bankAccount.verificationStatus ??
+                              (inspectedUser.bankAccount.verified
+                                ? "Simulated Verified"
+                                : "Pending Verification")
+                            }
+                          />
+                        </dd>
+                      </div>
+                    </dl>
+                    {!inspectedUser.bankAccount.verified && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const res = adminVerifyUserBankAccount(inspectedUser.id);
+                          if (res.ok) {
+                            toast.success(
+                              `Marked ${inspectedUser.fullName}'s bank account as Simulated Verified.`,
+                            );
+                          } else {
+                            toast.error(res.error ?? "Unable to update bank status.");
+                          }
+                        }}
+                        className="mt-3 inline-flex h-8 items-center rounded-md border border-border bg-card px-2.5 text-[11px] font-medium text-foreground hover:bg-secondary"
+                      >
+                        Mark Bank Reviewed (Simulated)
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <p className="mt-3 text-muted-foreground">
                     No Nigerian settlement bank account configured yet.
@@ -358,7 +433,7 @@ export function AdminUsersPage() {
 
             {/* Wallet Breakdown */}
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h4 className="text-xs font-semibold text-foreground">
                 Wallet Breakdown (NGN)
               </h4>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -417,7 +492,7 @@ export function AdminUsersPage() {
             <section className="rounded-xl border border-border bg-secondary/25 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   KYC Verification & Tier Management
                 </h4>
                 {inspectedUser.status !== "Active" && (
@@ -431,6 +506,38 @@ export function AdminUsersPage() {
                 )}
               </div>
 
+              {inspectedKycSubmissions.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    Client KYC Applications ({inspectedKycSubmissions.length})
+                  </p>
+                  {inspectedKycSubmissions.slice(0, 3).map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="rounded-lg border border-border bg-background p-3 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-foreground">
+                          {sub.id} · Requesting {sub.targetTier}
+                        </span>
+                        <StatusText status={sub.status} showIcon />
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {sub.idType} (••••{sub.idNumberLast4}) · BVN ••••{sub.bvnLast4} · DOB{" "}
+                        {sub.dateOfBirth}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        ID Doc: {sub.idDocumentName}
+                        {sub.proofOfAddressName ? ` · POA: ${sub.proofOfAddressName}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Address: {sub.residentialAddress} · Submitted {formatDateTime(sub.submittedAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <form onSubmit={handleSaveKycReview} className="mt-4 space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
@@ -441,7 +548,7 @@ export function AdminUsersPage() {
                       id="kyc-status"
                       value={kycStatus}
                       onChange={(e) => setKycStatus(e.target.value as AccountStatus)}
-                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground"
+                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="Active">Active</option>
                       <option value="Pending KYC">Pending KYC</option>
@@ -456,7 +563,7 @@ export function AdminUsersPage() {
                       id="kyc-level"
                       value={kycLevel}
                       onChange={(e) => setKycLevel(e.target.value as UserProfile["kycLevel"])}
-                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground"
+                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="Tier 1">Tier 1 (Unverified)</option>
                       <option value="Tier 2">Tier 2 (BVN Verified)</option>
@@ -471,7 +578,7 @@ export function AdminUsersPage() {
                       id="kyc-tier"
                       value={kycTier}
                       onChange={(e) => setKycTier(e.target.value as UserProfile["tier"])}
-                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground"
+                      className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="Silver">Silver</option>
                       <option value="Platinum">Platinum</option>
@@ -512,110 +619,129 @@ export function AdminUsersPage() {
 
             {/* User Investment History */}
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h4 className="text-xs font-semibold text-foreground">
                 Investment Mandates ({inspectedInvs.length})
               </h4>
               <div className="mt-2.5 overflow-hidden rounded-xl border border-border">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-border bg-secondary/40 text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2.5 font-medium">Mandate</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Principal</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Maturity</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {inspectedInvs.length === 0 ? (
-                      <TableEmptyRow
-                        colSpan={4}
-                        title="No investments yet"
-                        description="This client has not allocated capital to any mandate."
-                      />
-                    ) : (
-                      inspectedInvs.map((inv) => (
-                        <tr key={inv.id}>
-                          <td className="px-4 py-2.5">
-                            <p className="font-medium text-foreground">{inv.planName}</p>
-                            <p className="font-tabular text-[11px] text-muted-foreground">
-                              {inv.id} · {inv.targetReturnPercent}% target
-                            </p>
-                          </td>
-                          <td className="font-tabular px-4 py-2.5 text-right font-semibold text-foreground">
-                            {formatNaira(inv.principal)}
-                          </td>
-                          <td className="font-tabular px-4 py-2.5 text-right text-muted-foreground">
-                            {formatDate(inv.maturesAt)}
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <StatusText status={inv.status} />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-border bg-secondary/40 text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="px-4 py-2.5 font-medium">Mandate</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Principal</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Maturity</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {inspectedInvs.length === 0 ? (
+                        <TableEmptyRow
+                          colSpan={4}
+                          title="No investments yet"
+                          description="This client has not allocated capital to any mandate."
+                        />
+                      ) : (
+                        inspectedInvs.map((inv) => (
+                          <tr key={inv.id}>
+                            <td className="px-4 py-2.5">
+                              <p className="font-medium text-foreground">{inv.planName}</p>
+                              <p className="font-tabular text-[11px] text-muted-foreground">
+                                {inv.id} · {inv.targetReturnPercent}% target
+                              </p>
+                            </td>
+                            <td className="font-tabular px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                              {formatNaira(inv.principal)}
+                            </td>
+                            <td className="font-tabular px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
+                              {formatDate(inv.maturesAt)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                              <StatusText status={inv.status} />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
 
             {/* User Transaction History */}
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h4 className="text-xs font-semibold text-foreground">
                 Recent Ledger Transactions ({inspectedTxns.length})
               </h4>
               <div className="mt-2.5 overflow-hidden rounded-xl border border-border">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-border bg-secondary/40 text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2.5 font-medium">Type & Reference</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Amount</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Status</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {inspectedTxns.length === 0 ? (
-                      <TableEmptyRow
-                        colSpan={4}
-                        title="No transactions recorded"
-                        description="This client currently has an empty Naira ledger."
-                      />
-                    ) : (
-                      inspectedTxns.slice(0, 10).map((txn) => (
-                        <tr key={txn.id} className="hover:bg-secondary/25">
-                          <td className="px-4 py-2.5">
-                            <p className="font-medium text-foreground">{txn.type}</p>
-                            <p className="font-tabular text-[11px] text-muted-foreground">
-                              {txn.reference}
-                            </p>
-                          </td>
-                          <td className="font-tabular px-4 py-2.5 text-right font-semibold text-foreground">
-                            {formatNaira(txn.amount)}
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <StatusText status={txn.status} />
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedTxn(txn)}
-                              aria-label={`View receipt ${txn.reference}`}
-                              className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11px] font-medium text-foreground hover:bg-secondary"
-                            >
-                              <Receipt className="h-3 w-3" />
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-border bg-secondary/40 text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="px-4 py-2.5 font-medium">Type & Reference</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Amount</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Status</th>
+                        <th scope="col" className="px-4 py-2.5 text-right font-medium">Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {inspectedTxns.length === 0 ? (
+                        <TableEmptyRow
+                          colSpan={4}
+                          title="No transactions recorded"
+                          description="This client currently has an empty Naira ledger."
+                        />
+                      ) : (
+                        inspectedTxns.slice(0, 10).map((txn) => (
+                          <tr key={txn.id} className="hover:bg-secondary/25">
+                            <td className="px-4 py-2.5">
+                              <p className="font-medium text-foreground">{txn.type}</p>
+                              <p className="font-tabular text-[11px] text-muted-foreground">
+                                {txn.reference}
+                              </p>
+                            </td>
+                            <td className="font-tabular px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                              {formatNaira(txn.amount)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                              <StatusText status={txn.status} />
+                            </td>
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTxn(txn)}
+                                aria-label={`View receipt ${txn.reference}`}
+                                className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11px] font-medium text-foreground hover:bg-secondary"
+                              >
+                                <Receipt className="h-3 w-3" aria-hidden="true" />
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
           </div>
         )}
       </SlideOverDrawer>
+
+      <ConfirmDialog
+        open={Boolean(suspendTarget)}
+        onClose={() => setSuspendTarget(null)}
+        onConfirm={() => {
+          if (!suspendTarget) return;
+          handleStatusChange(suspendTarget, "Suspended");
+          setSuspendTarget(null);
+        }}
+        title="Suspend Investor Account?"
+        subtitle={suspendTarget ? `${suspendTarget.fullName} · ${suspendTarget.email}` : undefined}
+        description="Suspending this account immediately blocks new deposits, withdrawal requests, and investment subscriptions until an administrator reactivates the profile."
+        confirmLabel="Suspend Account"
+        tone="destructive"
+      />
 
       <TransactionReceiptModal transaction={selectedTxn} onClose={() => setSelectedTxn(null)} />
     </AdminDashboardLayout>

@@ -1,3 +1,5 @@
+import heroSuiteImg from "@/assets/images/hero_private_wealth_1795406518874.jpg";
+import aboutBuildingImg from "@/assets/images/about_architecture_1795406520117.jpg";
 import { getSupabasePublicConfig } from "@/services/supabase/config";
 
 export const APP_CONFIG = {
@@ -29,11 +31,10 @@ export const APP_CONFIG = {
     investmentRisk:
       "Illustrative target returns are projections based on historical asset allocation models and are not guaranteed profits. Capital is at risk; past performance does not guarantee future results.",
     simulationNotice:
-      "Frontend simulation mode: balances, deposits, withdrawals, and portfolio allocations operate on local mock data. Production financial execution will run server-side via PostgreSQL and Supabase Edge Functions.",
+      "TEST ENVIRONMENT — NOT A REAL BANK TRANSACTION. Balances, deposits, withdrawals, and portfolio allocations operate on local browser mock storage only. No live NIBSS, Paystack, or bank transfers occur.",
   },
   assets: {
-    heroSuite: "/src/assets/images/hero_private_wealth_1795406518874.jpg",
-    aboutBuilding: "/src/assets/images/about_architecture_1795406520117.jpg",
-    clientAvatar: "/src/assets/images/avatar_adaeze_1795406520834.jpg",
+    heroSuite: heroSuiteImg,
+    aboutBuilding: aboutBuildingImg,
   },
 } as const;

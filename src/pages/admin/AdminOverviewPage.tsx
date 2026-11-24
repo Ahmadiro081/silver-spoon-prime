@@ -11,13 +11,13 @@ import {
   YAxis,
 } from "recharts";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
-import { MetricCard, StatusText, TableEmptyRow } from "@/components/common/Primitives";
+import { EmptyState, MetricCard, StatusText, TableEmptyRow } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 import { buildPlatformMonthlyMetrics, calculateUserWalletMetrics } from "@/utils/calculations";
 import { formatCompactNaira, formatDateTime, formatNaira } from "@/utils/format";
 
 export function AdminOverviewPage() {
-  const { users, transactions, investments, auditLogs } = useAppState();
+  const { users, transactions, investments, auditLogs, kycSubmissions } = useAppState();
 
   const investors = users.filter((u) => u.role === "investor");
   const totalAum = investors.reduce((sum, u) => {
@@ -34,6 +34,7 @@ export function AdminOverviewPage() {
   const pendingWithdrawals = transactions.filter(
     (t) => t.type === "Withdrawal" && t.status === "Pending",
   );
+  const pendingKycCount = kycSubmissions.filter((s) => s.status === "Under Review").length;
   const activeMandatesValue = investments
     .filter((i) => i.status === "Active")
     .reduce((s, i) => s + i.principal, 0);
@@ -42,6 +43,7 @@ export function AdminOverviewPage() {
     () => buildPlatformMonthlyMetrics(users, transactions, investments),
     [users, transactions, investments],
   );
+  const hasMonthlyFlowData = monthlyFlows.some((m) => m.deposits > 0 || m.withdrawals > 0);
 
   return (
     <AdminDashboardLayout
@@ -97,41 +99,55 @@ export function AdminOverviewPage() {
                 to="/admin/analytics"
                 className="inline-flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
               >
-                Full Analytics <ArrowRight className="h-3.5 w-3.5" />
+                Full Analytics <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             </div>
 
-            <div className="mt-5 h-[260px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyFlows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tickFormatter={(v) => formatCompactNaira(Number(v))}
-                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={64}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => formatNaira(value)}
-                    contentStyle={{
-                      backgroundColor: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Bar dataKey="deposits" name="Deposits" fill="var(--color-chart-1)" radius={[5, 5, 0, 0]} />
-                  <Bar dataKey="withdrawals" name="Withdrawals" fill="var(--color-chart-2)" radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {!hasMonthlyFlowData ? (
+              <div className="mt-6">
+                <EmptyState
+                  title="No treasury flows recorded yet"
+                  description="Confirmed Naira deposits and settled withdrawals will chart here once client accounts begin transacting."
+                />
+              </div>
+            ) : (
+              <div
+                className="mt-5 h-[260px] w-full"
+                role="img"
+                aria-label="Monthly Naira confirmed deposits versus settled withdrawals chart"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyFlows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tickFormatter={(v) => formatCompactNaira(Number(v))}
+                      tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={64}
+                    />
+                    <Tooltip
+                      formatter={(value: number) => formatNaira(value)}
+                      contentStyle={{
+                        backgroundColor: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "10px",
+                        color: "var(--color-foreground)",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Bar dataKey="deposits" name="Deposits" fill="var(--color-chart-1)" radius={[5, 5, 0, 0]} />
+                    <Bar dataKey="withdrawals" name="Withdrawals" fill="var(--color-chart-2)" radius={[5, 5, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Pending Operations Queue */}
@@ -143,7 +159,7 @@ export function AdminOverviewPage() {
               </p>
 
               <div className="mt-5 space-y-4">
-                <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">Pending Withdrawals</p>
                     <p className="font-tabular text-xs text-muted-foreground">
@@ -152,13 +168,13 @@ export function AdminOverviewPage() {
                   </div>
                   <Link
                     to="/admin/withdrawals"
-                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
                   >
                     Review ({pendingWithdrawals.length})
                   </Link>
                 </div>
 
-                <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">Pending Deposits</p>
                     <p className="font-tabular text-xs text-muted-foreground">
@@ -167,13 +183,30 @@ export function AdminOverviewPage() {
                   </div>
                   <Link
                     to="/admin/deposits"
-                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
                   >
                     Review ({pendingDeposits.length})
                   </Link>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Pending KYC Applications</p>
+                    <p className="text-xs text-muted-foreground">
+                      {pendingKycCount > 0
+                        ? `${pendingKycCount} compliance review${pendingKycCount === 1 ? "" : "s"} awaiting decision`
+                        : "All submitted KYC packets reviewed"}
+                    </p>
+                  </div>
+                  <Link
+                    to="/admin/users"
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+                  >
+                    Review ({pendingKycCount})
+                  </Link>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">Confirmed Deposits (Mock)</p>
                     <p className="font-tabular text-xs text-muted-foreground">
@@ -182,7 +215,7 @@ export function AdminOverviewPage() {
                   </div>
                   <Link
                     to="/admin/transactions"
-                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
                   >
                     Inspect
                   </Link>
@@ -211,11 +244,11 @@ export function AdminOverviewPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Timestamp</th>
-                  <th className="px-6 py-3 font-medium">Actor</th>
-                  <th className="px-6 py-3 font-medium">Event</th>
-                  <th className="px-6 py-3 font-medium">Summary</th>
-                  <th className="px-6 py-3 text-right font-medium">Severity</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Timestamp</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Actor</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Event</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Summary</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Severity</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

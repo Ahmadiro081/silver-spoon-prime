@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Check, Copy, Search } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { UserDashboardLayout } from "@/layouts/UserDashboardLayout";
 import {
   MetricCard,
+  SearchInput,
   SegmentedFilter,
   StatusText,
   TableEmptyRow,
@@ -91,26 +92,26 @@ export function ReferralsPage() {
                 <label htmlFor="ref-link" className="block text-xs font-medium text-muted-foreground">
                   Invitation URL
                 </label>
-                <div className="mt-1.5 flex gap-2">
+                <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
                   <input
                     id="ref-link"
                     type="text"
                     readOnly
                     value={referralLink}
-                    className="font-tabular h-10 flex-1 rounded-lg border border-input bg-secondary/40 px-3 text-xs text-foreground"
+                    className="font-tabular h-10 w-full flex-1 rounded-lg border border-input bg-secondary/40 px-3 text-xs text-foreground"
                   />
                   <button
                     type="button"
                     onClick={() => copyValue(referralLink, "link")}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground whitespace-nowrap hover:bg-primary/90"
+                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground whitespace-nowrap hover:bg-primary/90"
                   >
                     {copiedField === "link" ? (
                       <>
-                        <Check className="h-3.5 w-3.5" /> Copied
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" /> Copied
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3.5 w-3.5" /> Copy Link
+                        <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy Link
                       </>
                     )}
                   </button>
@@ -121,26 +122,26 @@ export function ReferralsPage() {
                 <label htmlFor="ref-code" className="block text-xs font-medium text-muted-foreground">
                   Referral Code
                 </label>
-                <div className="mt-1.5 flex gap-2">
+                <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
                   <input
                     id="ref-code"
                     type="text"
                     readOnly
                     value={investorCode}
-                    className="font-tabular h-10 w-52 rounded-lg border border-input bg-secondary/40 px-3 text-sm font-semibold text-foreground"
+                    className="font-tabular h-10 w-full rounded-lg border border-input bg-secondary/40 px-3 text-sm font-semibold text-foreground sm:w-52"
                   />
                   <button
                     type="button"
                     onClick={() => copyValue(investorCode, "code")}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
+                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
                   >
                     {copiedField === "code" ? (
                       <>
-                        <Check className="h-3.5 w-3.5 text-success" /> Copied
+                        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" /> Copied
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3.5 w-3.5" /> Copy Code
+                        <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy Code
                       </>
                     )}
                   </button>
@@ -181,17 +182,16 @@ export function ReferralsPage() {
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative w-full sm:w-56">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search invitee..."
-                  className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Search invitee..."
+                ariaLabel="Search invited clients by name, email, or ID"
+                compact
+                className="w-full sm:w-56"
+              />
               <SegmentedFilter
+                ariaLabel="Filter referrals by status"
                 value={statusFilter}
                 onChange={setStatusFilter}
                 options={[
@@ -207,11 +207,11 @@ export function ReferralsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Invited Client</th>
-                  <th className="px-6 py-3 font-medium">Joined</th>
-                  <th className="px-6 py-3 text-right font-medium">Qualifying Allocation</th>
-                  <th className="px-6 py-3 text-right font-medium">Commission Earned</th>
-                  <th className="px-6 py-3 text-right font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Invited Client</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Joined</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Qualifying Allocation</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Commission Earned</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -227,6 +227,20 @@ export function ReferralsPage() {
                       userReferrals.length === 0
                         ? "Share your personal referral link above to invite investors and earn simulated referral commissions on their first qualifying mandate."
                         : "Clear your search or status filter to inspect all invited accounts."
+                    }
+                    action={
+                      userReferrals.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuery("");
+                            setStatusFilter("ALL");
+                          }}
+                          className="inline-flex h-9 items-center rounded-lg border border-border px-3.5 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Clear Filters
+                        </button>
+                      ) : undefined
                     }
                   />
                 ) : (

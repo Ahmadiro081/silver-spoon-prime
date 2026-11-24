@@ -19,12 +19,48 @@ export type NotificationCategory =
   | "security"
   | "platform";
 
+export type BankVerificationStatus =
+  | "Unverified"
+  | "Pending Verification"
+  | "Simulated Verified";
+
 export interface BankAccountDetails {
   bankName: string;
   bankCode: string;
   accountNumber: string;
   accountName: string;
   verified: boolean;
+  verificationStatus?: BankVerificationStatus;
+  updatedAt?: string;
+}
+
+export type KycDocumentType =
+  | "NIN"
+  | "International Passport"
+  | "Driver's License"
+  | "Voter's Card";
+
+export type KycSubmissionStatus =
+  | "Under Review"
+  | "Approved"
+  | "Needs Resubmission";
+
+export interface KycSubmissionRecord {
+  id: string;
+  userId: string;
+  targetTier: "Tier 2" | "Tier 3";
+  idType: KycDocumentType;
+  idNumberLast4: string;
+  bvnLast4: string;
+  dateOfBirth: string;
+  residentialAddress: string;
+  idDocumentName: string;
+  proofOfAddressName?: string;
+  submittedAt: string;
+  status: KycSubmissionStatus;
+  reviewerNote?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 export interface UserProfile {
@@ -90,7 +126,19 @@ export interface InvestmentRecord {
   startedAt: string;
   maturesAt: string;
   autoCompound: boolean;
+  settledAt?: string;
+  maturityPayoutTxnId?: string;
+  rolledOverFromInvestmentId?: string;
+  rolledOverToInvestmentId?: string;
+  rolloverCycle?: number;
+  rolloverSkippedReason?: string;
 }
+
+export type PayoutScheduleStatus =
+  | "Settled"
+  | "Pending Settlement"
+  | "Scheduled"
+  | "Cancelled";
 
 export interface PayoutScheduleItem {
   installment: number;
@@ -98,7 +146,7 @@ export interface PayoutScheduleItem {
   scheduledDate: string;
   projectedAmount: number;
   principalComponent: number;
-  status: "Settled" | "Projected";
+  status: PayoutScheduleStatus;
 }
 
 export interface TransactionRecord {
@@ -142,6 +190,10 @@ export interface NotificationItem {
   message: string;
   category: NotificationCategory;
   createdAt: string;
+  readByUserIds: string[];
+}
+
+export interface UserNotificationItem extends NotificationItem {
   read: boolean;
 }
 

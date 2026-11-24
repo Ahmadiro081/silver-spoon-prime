@@ -1,15 +1,25 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, KeyRound, MailWarning, ShieldCheck } from "lucide-react";
+import { CheckCircle2, KeyRound, MailWarning, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { UserDashboardLayout } from "@/layouts/UserDashboardLayout";
-import { StatusText } from "@/components/common/Primitives";
+import { ConfirmDialog, Modal } from "@/components/common/Modal";
+import { FormAlert, PasswordInput, StatusText } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 import { useTheme } from "@/context/ThemeContext";
 import { formatDateTime } from "@/utils/format";
 
 export function SettingsPage() {
-  const { currentUser, updateProfile, changePassword, resetDemoState } = useAppState();
+  const {
+    currentUser,
+    pendingTwoFactorCode,
+    updateProfile,
+    changePassword,
+    requestTwoFactorChallenge,
+    enableTwoFactor,
+    disableTwoFactor,
+    resetDemoState,
+  } = useAppState();
   const { theme, setTheme } = useTheme();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -17,10 +27,67 @@ export function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const toggleSetting = (key: "twoFactorEnabled" | "emailAlerts" | "smsAlerts") => {
+  // Simulated 2FA enrollment / disable modal states
+  const [enable2faOpen, setEnable2faOpen] = useState(false);
+  const [enable2faCode, setEnable2faCode] = useState("");
+  const [enable2faError, setEnable2faError] = useState<string | null>(null);
+
+  const [disable2faOpen, setDisable2faOpen] = useState(false);
+  const [disable2faPassword, setDisable2faPassword] = useState("");
+  const [disable2faError, setDisable2faError] = useState<string | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  const toggleCommunicationSetting = (key: "emailAlerts" | "smsAlerts") => {
     const next = !currentUser[key];
-    updateProfile({ [key]: next });
-    toast.success("Preference updated.");
+    const res = updateProfile({ [key]: next });
+    if (!res.ok) {
+      toast.error(res.error ?? "Unable to update preference.");
+      return;
+    }
+    toast.success("Notification preference updated.");
+  };
+
+  const handleTwoFactorToggleClick = () => {
+    if (currentUser.twoFactorEnabled) {
+      setDisable2faPassword("");
+      setDisable2faError(null);
+      setDisable2faOpen(true);
+      return;
+    }
+    const challenge = requestTwoFactorChallenge("simulated 2FA enrollment");
+    if (!challenge.ok) {
+      toast.error(challenge.error ?? "Unable to initiate simulated 2FA setup.");
+      return;
+    }
+    setEnable2faCode("");
+    setEnable2faError(null);
+    setEnable2faOpen(true);
+  };
+
+  const handleEnableTwoFactorSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setEnable2faError(null);
+    const res = enableTwoFactor(enable2faCode);
+    if (!res.ok) {
+      setEnable2faError(res.error ?? "Unable to enable simulated 2FA.");
+      return;
+    }
+    setEnable2faOpen(false);
+    setEnable2faCode("");
+    toast.success("Simulated 2FA enabled for withdrawal requests.");
+  };
+
+  const handleDisableTwoFactorSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setDisable2faError(null);
+    const res = disableTwoFactor(disable2faPassword);
+    if (!res.ok) {
+      setDisable2faError(res.error ?? "Unable to disable simulated 2FA.");
+      return;
+    }
+    setDisable2faOpen(false);
+    setDisable2faPassword("");
+    toast.success("Simulated 2FA disabled.");
   };
 
   const handlePasswordChange = (e: FormEvent) => {
@@ -59,10 +126,10 @@ export function SettingsPage() {
                 Account Security Overview
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Current verification posture and session telemetry for your SILVER SPOON account.
+                Current verification posture and session details for your SILVER SPOON account.
               </p>
             </div>
-            <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           </div>
 
           <dl className="mt-5 grid gap-4 border-t border-border pt-5 text-xs sm:grid-cols-2">
@@ -71,13 +138,13 @@ export function SettingsPage() {
               <dd className="mt-1">
                 {currentUser.emailVerified ? (
                   <span className="inline-flex items-center gap-1.5 font-medium text-success">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                     Verified ({currentUser.email})
                   </span>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 font-medium text-warning">
-                      <MailWarning className="h-3.5 w-3.5" />
+                      <MailWarning className="h-3.5 w-3.5" aria-hidden="true" />
                       Unverified
                     </span>
                     <Link
@@ -92,16 +159,26 @@ export function SettingsPage() {
             </div>
             <div>
               <dt className="text-muted-foreground">KYC & Account Status</dt>
-              <dd className="mt-1 flex items-center gap-2">
+              <dd className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="font-medium text-foreground">{currentUser.kycLevel}</span>
-                <span className="text-muted-foreground">·</span>
+                <span aria-hidden="true" className="text-muted-foreground">·</span>
                 <StatusText status={currentUser.status} />
+                {currentUser.role === "investor" && (
+                  <Link
+                    to="/dashboard/profile#kyc"
+                    className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                  >
+                    Manage KYC
+                  </Link>
+                )}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Two-Factor Safeguard</dt>
+              <dt className="text-muted-foreground">Two-Factor Safeguard (Simulated)</dt>
               <dd className="mt-1 font-medium text-foreground">
-                {currentUser.twoFactorEnabled ? "Enabled (Simulated 2FA)" : "Disabled"}
+                {currentUser.twoFactorEnabled
+                  ? "Enabled for withdrawals (Simulated 2FA)"
+                  : "Disabled"}
               </dd>
             </div>
             <div>
@@ -119,36 +196,29 @@ export function SettingsPage() {
             <div>
               <h2 className="font-display text-xl font-medium text-foreground">Change Password</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Update your simulated login credentials. Demo accounts default to{" "}
-                <span className="font-tabular text-foreground">silverspoon2026</span>.
+                Update the password for your registered account in this test environment.
               </p>
             </div>
-            <KeyRound className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <KeyRound className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           </div>
 
-          <form onSubmit={handlePasswordChange} className="mt-5 space-y-4">
-            {passwordError && (
-              <div
-                role="alert"
-                className="rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive"
-              >
-                {passwordError}
-              </div>
-            )}
+          <form onSubmit={handlePasswordChange} className="mt-5 space-y-4" noValidate>
+            {passwordError && <FormAlert>{passwordError}</FormAlert>}
 
             <div>
               <label htmlFor="sec-cur-pass" className="block text-xs font-medium text-foreground">
                 Current Password
               </label>
-              <input
+              <PasswordInput
                 id="sec-cur-pass"
-                type="password"
                 required
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
                 autoComplete="current-password"
                 placeholder="Enter current password"
-                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -157,16 +227,17 @@ export function SettingsPage() {
                 <label htmlFor="sec-new-pass" className="block text-xs font-medium text-foreground">
                   New Password
                 </label>
-                <input
+                <PasswordInput
                   id="sec-new-pass"
-                  type="password"
                   required
                   minLength={8}
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (passwordError) setPasswordError(null);
+                  }}
                   autoComplete="new-password"
                   placeholder="Minimum 8 characters"
-                  className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
@@ -176,16 +247,17 @@ export function SettingsPage() {
                 >
                   Confirm New Password
                 </label>
-                <input
+                <PasswordInput
                   id="sec-confirm-pass"
-                  type="password"
                   required
                   minLength={8}
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (passwordError) setPasswordError(null);
+                  }}
                   autoComplete="new-password"
                   placeholder="Re-enter new password"
-                  className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>
@@ -214,27 +286,27 @@ export function SettingsPage() {
               Security & Communication Preferences
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Manage authentication safeguards and ledger notification channels.
+              Manage simulated authentication safeguards and ledger notification channels.
             </p>
           </div>
 
           <SettingRow
-            title="Two-Factor Authentication (2FA)"
-            description="Require an authenticator code before confirming withdrawal disbursements."
+            title="Two-Factor Authentication (Simulated 2FA)"
+            description="Require a simulated 6-digit confirmation code before submitting withdrawal requests. Enabling requires code verification; disabling requires your current password. Live TOTP apps and server-side login MFA are pending backend integration."
             enabled={currentUser.twoFactorEnabled}
-            onToggle={() => toggleSetting("twoFactorEnabled")}
+            onToggle={handleTwoFactorToggleClick}
           />
           <SettingRow
-            title="Email Settlement Notices"
-            description="Receive instant PDF-ready summaries for deposits, allocations, and maturities."
+            title="Email Settlement Notices (Preference)"
+            description="Record preference for email summaries on deposits, allocations, and maturities (simulated — live email delivery pending backend integration)."
             enabled={currentUser.emailAlerts}
-            onToggle={() => toggleSetting("emailAlerts")}
+            onToggle={() => toggleCommunicationSetting("emailAlerts")}
           />
           <SettingRow
-            title="SMS Transaction Alerts"
-            description="Send Nigerian SMS notifications for withdrawal requests and login events."
+            title="SMS Transaction Alerts (Preference)"
+            description="Record preference for Nigerian SMS notifications on withdrawals and sign-ins (simulated — live SMS gateway pending backend integration)."
             enabled={currentUser.smsAlerts}
-            onToggle={() => toggleSetting("smsAlerts")}
+            onToggle={() => toggleCommunicationSetting("smsAlerts")}
           />
         </section>
 
@@ -243,25 +315,27 @@ export function SettingsPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             Choose between porcelain light mode and obsidian dark mode.
           </p>
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex flex-wrap gap-3" role="group" aria-label="Interface theme">
             <button
               type="button"
+              aria-pressed={theme === "light"}
               onClick={() => setTheme("light")}
-              className={`h-10 rounded-lg border px-4 text-xs font-medium ${
+              className={`h-10 rounded-lg border px-4 text-xs font-medium transition-colors ${
                 theme === "light"
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-foreground"
+                  : "border-border bg-background text-foreground hover:bg-secondary"
               }`}
             >
               Light Mode
             </button>
             <button
               type="button"
+              aria-pressed={theme === "dark"}
               onClick={() => setTheme("dark")}
-              className={`h-10 rounded-lg border px-4 text-xs font-medium ${
+              className={`h-10 rounded-lg border px-4 text-xs font-medium transition-colors ${
                 theme === "dark"
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-foreground"
+                  : "border-border bg-background text-foreground hover:bg-secondary"
               }`}
             >
               Dark Mode
@@ -270,23 +344,168 @@ export function SettingsPage() {
         </section>
 
         <section className="surface-card p-6">
-          <h2 className="font-display text-xl font-medium text-foreground">Mock Data Controls</h2>
+          <h2 className="font-display text-xl font-medium text-foreground">Local Storage Controls</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Restore initial Naira mock balances, transactions, investments, and audit logs while
-            preserving your active role.
+            Clear all locally stored test accounts, simulated transactions, investments, KYC
+            submissions, and audit logs from this browser and return to a clean empty state.
           </p>
           <button
             type="button"
-            onClick={() => {
-              resetDemoState();
-              toast.success("Simulated platform data restored to initial defaults.");
-            }}
+            onClick={() => setResetConfirmOpen(true)}
             className="mt-4 inline-flex h-10 items-center rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
           >
-            Reset Simulated Data
+            Clear Local Test Data
           </button>
         </section>
       </div>
+
+      {/* Enable Simulated 2FA Modal */}
+      <Modal
+        open={enable2faOpen}
+        onClose={() => setEnable2faOpen(false)}
+        title="Enable Simulated Two-Factor Authentication"
+        subtitle="Withdrawal Confirmation Safeguard"
+        maxWidthClass="max-w-md"
+      >
+        <form onSubmit={handleEnableTwoFactorSubmit} className="space-y-4" noValidate>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Confirm enrollment by entering the freshly issued 6-digit simulated code below. Once
+            enabled, withdrawal submissions will require a fresh confirmation code. Live TOTP
+            authenticator apps and server-side login MFA remain pending backend integration.
+          </p>
+
+          <div className="rounded-lg border border-border bg-secondary/35 p-3.5 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">Simulated Setup Code</span>
+              <button
+                type="button"
+                onClick={() => {
+                  requestTwoFactorChallenge("simulated 2FA enrollment");
+                  setEnable2faCode("");
+                  setEnable2faError(null);
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                Regenerate
+              </button>
+            </div>
+            <p className="font-tabular mt-1.5 text-lg font-semibold tracking-widest text-foreground">
+              {pendingTwoFactorCode ?? "------"}
+            </p>
+          </div>
+
+          {enable2faError && <FormAlert>{enable2faError}</FormAlert>}
+
+          <div>
+            <label htmlFor="enable-2fa-code" className="block text-xs font-medium text-foreground">
+              Enter 6-Digit Setup Code
+            </label>
+            <input
+              id="enable-2fa-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              required
+              value={enable2faCode}
+              onChange={(e) => {
+                setEnable2faCode(e.target.value.replace(/\D/g, ""));
+                if (enable2faError) setEnable2faError(null);
+              }}
+              placeholder="6-digit code"
+              className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <button
+              type="button"
+              onClick={() => setEnable2faOpen(false)}
+              className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={enable2faCode.length !== 6}
+              className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Confirm & Enable 2FA
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Disable Simulated 2FA Modal */}
+      <Modal
+        open={disable2faOpen}
+        onClose={() => setDisable2faOpen(false)}
+        title="Disable Simulated Two-Factor Authentication"
+        subtitle="Password Confirmation Required"
+        maxWidthClass="max-w-md"
+      >
+        <form onSubmit={handleDisableTwoFactorSubmit} className="space-y-4" noValidate>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Enter your current account password to disable the simulated 2FA withdrawal confirmation
+            step.
+          </p>
+
+          {disable2faError && <FormAlert>{disable2faError}</FormAlert>}
+
+          <div>
+            <label
+              htmlFor="disable-2fa-pass"
+              className="block text-xs font-medium text-foreground"
+            >
+              Current Password
+            </label>
+            <PasswordInput
+              id="disable-2fa-pass"
+              required
+              value={disable2faPassword}
+              onChange={(e) => {
+                setDisable2faPassword(e.target.value);
+                if (disable2faError) setDisable2faError(null);
+              }}
+              autoComplete="current-password"
+              placeholder="Enter current password"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <button
+              type="button"
+              onClick={() => setDisable2faOpen(false)}
+              className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!disable2faPassword.trim()}
+              className="h-10 rounded-lg bg-destructive px-5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Disable Simulated 2FA
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={() => {
+          resetDemoState();
+          setResetConfirmOpen(false);
+          toast.success("Local test data cleared. You have been signed out.");
+        }}
+        title="Clear Local Test Data?"
+        subtitle="Reset Browser Storage"
+        description="This permanently removes all registered local accounts, simulated deposits, withdrawals, investments, KYC records, and settings from this browser and returns the workspace to a clean empty state."
+        confirmLabel="Clear All Data"
+        tone="destructive"
+      />
     </UserDashboardLayout>
   );
 }
@@ -302,22 +521,32 @@ function SettingRow({
   enabled: boolean;
   onToggle: () => void;
 }) {
+  const titleId = useId();
+  const descriptionId = useId();
+
   return (
     <div className="flex items-center justify-between gap-4 px-6 py-4">
       <div>
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        <p id={titleId} className="text-sm font-medium text-foreground">
+          {title}
+        </p>
+        <p id={descriptionId} className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         onClick={onToggle}
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-          enabled ? "bg-primary" : "bg-secondary border border-border"
+          enabled ? "bg-primary" : "border border-border bg-secondary"
         }`}
       >
         <span
+          aria-hidden="true"
           className={`inline-block h-4 w-4 rounded-full bg-card shadow-subtle transition-transform ${
             enabled ? "translate-x-6" : "translate-x-1"
           }`}

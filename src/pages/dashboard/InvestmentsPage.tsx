@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { UserDashboardLayout } from "@/layouts/UserDashboardLayout";
 import {
+  FormAlert,
   MetricCard,
   RiskDisclosure,
   SegmentedFilter,
@@ -29,6 +30,7 @@ import { daysRemaining, formatCompactNaira, formatDate, formatNaira } from "@/ut
 
 export function InvestmentsPage() {
   const {
+    currentUser,
     plans,
     userInvestments,
     userWallet,
@@ -40,7 +42,11 @@ export function InvestmentsPage() {
   const [selectedInvestmentId, setSelectedInvestmentId] = useState<string | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [autoCompound, setAutoCompound] = useState(true);
+  const [allocError, setAllocError] = useState<string | null>(null);
+  const [allocSubmitting, setAllocSubmitting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "Active" | "Matured">("ALL");
+
+  const isSuspended = currentUser.status === "Suspended";
 
   const activePlans = plans.filter((p) => p.status === "Active");
   const filteredInvestments = userInvestments.filter(
@@ -66,18 +72,24 @@ export function InvestmentsPage() {
     setSelectedPlan(plan);
     setAmountInput(String(plan.minAmount));
     setAutoCompound(true);
+    setAllocError(null);
   };
 
   const handleSubscribe = (e: FormEvent) => {
     e.preventDefault();
     if (!selectedPlan) return;
+    setAllocError(null);
+    setAllocSubmitting(true);
     const res = subscribeInvestment({
       planId: selectedPlan.id,
       amount: Number(amountInput),
       autoCompound,
     });
+    setAllocSubmitting(false);
     if (!res.ok || !res.data) {
-      toast.error(res.error ?? "Unable to allocate funds.");
+      const msg = res.error ?? "Unable to allocate funds.";
+      setAllocError(msg);
+      toast.error(msg);
       return;
     }
     toast.success(`Allocated ${formatNaira(res.data.principal)} into ${res.data.planName}.`);
@@ -124,6 +136,12 @@ export function InvestmentsPage() {
   return (
     <UserDashboardLayout title="Investments & Mandates" breadcrumb="Investments">
       <div className="space-y-6">
+        {isSuspended && (
+          <FormAlert>
+            This account is suspended. New investment allocations are disabled until compliance
+            restores active standing.
+          </FormAlert>
+        )}
         {/* Portfolio Summary — Clearly distinguishing Realized vs Simulated */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
@@ -185,7 +203,11 @@ export function InvestmentsPage() {
               </p>
             </div>
           ) : (
-            <div className="mt-5 h-[230px] w-full">
+            <div
+              className="mt-5 h-[230px] w-full"
+              role="img"
+              aria-label="Active principal compared against simulated target returns by mandate"
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={allocationChartData}
@@ -215,6 +237,7 @@ export function InvestmentsPage() {
                       backgroundColor: "var(--color-card)",
                       border: "1px solid var(--color-border)",
                       borderRadius: "10px",
+                      color: "var(--color-foreground)",
                       fontSize: "12px",
                     }}
                   />
@@ -315,6 +338,7 @@ export function InvestmentsPage() {
               </p>
             </div>
             <SegmentedFilter
+              ariaLabel="Filter investments by status"
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
@@ -329,14 +353,14 @@ export function InvestmentsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Mandate</th>
-                  <th className="px-6 py-3 text-right font-medium">Principal</th>
-                  <th className="px-6 py-3 text-right font-medium">Sim. Target*</th>
-                  <th className="px-6 py-3 font-medium">Progress</th>
-                  <th className="px-6 py-3 font-medium">Auto-Compound</th>
-                  <th className="px-6 py-3 font-medium">Maturity</th>
-                  <th className="px-6 py-3 text-right font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Statement</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Mandate</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Principal</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Sim. Target*</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Progress</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Auto-Compound</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Maturity</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Statement</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -348,6 +372,17 @@ export function InvestmentsPage() {
                       statusFilter === "ALL"
                         ? "You have not subscribed to any investment mandate yet. Select a plan above to allocate available funds."
                         : `No ${statusFilter.toLowerCase()} mandates match the selected filter.`
+                    }
+                    action={
+                      statusFilter !== "ALL" ? (
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter("ALL")}
+                          className="inline-flex h-9 items-center rounded-lg border border-border px-3.5 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Show All Investments
+                        </button>
+                      ) : undefined
                     }
                   />
                 ) : (
@@ -367,6 +402,9 @@ export function InvestmentsPage() {
                           <p className="font-medium text-foreground">{inv.planName}</p>
                           <p className="font-tabular text-xs text-muted-foreground">
                             {inv.id} · {inv.riskBand} risk · {inv.durationDays}d
+                            {inv.rolledOverFromInvestmentId
+                              ? ` · Cycle #${inv.rolloverCycle ?? 2} rollover`
+                              : ""}
                           </p>
                         </td>
                         <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground">
@@ -378,13 +416,22 @@ export function InvestmentsPage() {
                           </p>
                           <p className="text-muted-foreground">
                             {inv.status === "Matured"
-                              ? "Realized & settled"
+                              ? inv.rolledOverToInvestmentId
+                                ? "Realized & rolled over"
+                                : "Realized & settled"
                               : `${inv.targetReturnPercent}% sim. est.`}
                           </p>
                         </td>
                         <td className="px-6 py-3.5">
                           <div className="w-28">
-                            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                            <div
+                              role="progressbar"
+                              aria-valuenow={pct}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-label={`${inv.planName} progress`}
+                              className="h-1.5 overflow-hidden rounded-full bg-secondary"
+                            >
                               <div
                                 className="h-full rounded-full bg-primary"
                                 style={{ width: `${pct}%` }}
@@ -398,7 +445,15 @@ export function InvestmentsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-3.5 text-xs text-muted-foreground">
-                          {inv.autoCompound ? "Enabled" : "Disabled"}
+                          {inv.rolledOverToInvestmentId ? (
+                            <span className="font-tabular font-medium text-foreground">
+                              Rolled → {inv.rolledOverToInvestmentId}
+                            </span>
+                          ) : inv.autoCompound ? (
+                            "Enabled"
+                          ) : (
+                            "Disabled"
+                          )}
                         </td>
                         <td className="font-tabular px-6 py-3.5 text-xs text-muted-foreground">
                           {formatDate(inv.maturesAt)}
@@ -409,13 +464,14 @@ export function InvestmentsPage() {
                         <td className="px-6 py-3.5 text-right">
                           <button
                             type="button"
+                            aria-label={`Inspect statement for ${inv.planName} ${inv.id}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedInvestmentId(inv.id);
                             }}
                             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
                           >
-                            <FileText className="h-3 w-3" />
+                            <FileText className="h-3 w-3" aria-hidden="true" />
                             Details
                           </button>
                         </td>
@@ -440,15 +496,33 @@ export function InvestmentsPage() {
         maxWidthClass="max-w-lg"
       >
         {selectedPlan && (
-          <form onSubmit={handleSubscribe} className="space-y-4">
+          <form onSubmit={handleSubscribe} className="space-y-4" noValidate>
+            {allocError && <FormAlert>{allocError}</FormAlert>}
+
             <div>
-              <div className="flex justify-between text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <label htmlFor="alloc-amt" className="font-medium text-foreground">
                   Principal Amount (₦)
                 </label>
-                <span className="font-tabular text-muted-foreground">
-                  Available: {formatNaira(userWallet.availableBalance)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-tabular text-muted-foreground">
+                    Available: {formatNaira(userWallet.availableBalance)}
+                  </span>
+                  {userWallet.availableBalance >= selectedPlan.minAmount && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAmountInput(
+                          String(Math.min(userWallet.availableBalance, selectedPlan.maxAmount)),
+                        );
+                        if (allocError) setAllocError(null);
+                      }}
+                      className="rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:bg-secondary"
+                    >
+                      Use max
+                    </button>
+                  )}
+                </div>
               </div>
               <input
                 id="alloc-amt"
@@ -457,7 +531,10 @@ export function InvestmentsPage() {
                 max={selectedPlan.maxAmount}
                 step={10000}
                 value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
+                onChange={(e) => {
+                  setAmountInput(e.target.value);
+                  if (allocError) setAllocError(null);
+                }}
                 className="font-tabular mt-1.5 h-11 w-full rounded-lg border border-input bg-background px-3.5 text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <p className="font-tabular mt-1 text-[11px] text-muted-foreground">
@@ -495,14 +572,17 @@ export function InvestmentsPage() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2.5 text-xs text-muted-foreground">
+            <label className="flex items-start gap-2.5 text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={autoCompound}
                 onChange={(e) => setAutoCompound(e.target.checked)}
-                className="rounded border-input accent-primary"
+                className="mt-0.5 rounded border-input accent-primary"
               />
-              Enable automatic re-allocation preference at maturity
+              <span>
+                Auto-compound principal + realized return into a new cycle upon maturity (subject to
+                active plan availability and allocation limits)
+              </span>
             </label>
 
             <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -519,9 +599,10 @@ export function InvestmentsPage() {
               </button>
               <button
                 type="submit"
-                className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                disabled={allocSubmitting || isSuspended}
+                className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Confirm Allocation
+                {allocSubmitting ? "Allocating..." : "Confirm Allocation"}
               </button>
             </div>
           </form>

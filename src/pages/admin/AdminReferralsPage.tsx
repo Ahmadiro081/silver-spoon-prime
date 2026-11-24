@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
+import { ConfirmDialog } from "@/components/common/Modal";
 import {
   MetricCard,
+  SearchInput,
   SegmentedFilter,
   StatusText,
   TableEmptyRow,
@@ -16,6 +17,14 @@ export function AdminReferralsPage() {
   const { referrals, settings, adminMarkReferralPaid } = useAppState();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | ReferralRecord["status"]>("ALL");
+  const [settleTarget, setSettleTarget] = useState<ReferralRecord | null>(null);
+
+  const hasFilters = Boolean(query.trim()) || statusFilter !== "ALL";
+
+  const clearFilters = () => {
+    setQuery("");
+    setStatusFilter("ALL");
+  };
 
   const filtered = referrals.filter((ref) => {
     const matchesStatus = statusFilter === "ALL" || ref.status === statusFilter;
@@ -58,17 +67,15 @@ export function AdminReferralsPage() {
         </section>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search referrer, invitee, email, or ID..."
-              className="h-10 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search referrer, invitee, email, or ID..."
+            ariaLabel="Search referrals by referrer, invitee, email, or ID"
+            className="w-full max-w-sm"
+          />
           <SegmentedFilter
+            ariaLabel="Filter referrals by status"
             value={statusFilter}
             onChange={setStatusFilter}
             options={[
@@ -78,6 +85,21 @@ export function AdminReferralsPage() {
               { label: "Pending", value: "Pending" },
             ]}
           />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite" className="font-tabular">
+            Showing {filtered.length} of {referrals.length} referral records
+          </p>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -93,14 +115,14 @@ export function AdminReferralsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">ID</th>
-                  <th className="px-6 py-3 font-medium">Referrer</th>
-                  <th className="px-6 py-3 font-medium">Invited Client</th>
-                  <th className="px-6 py-3 font-medium">Joined</th>
-                  <th className="px-6 py-3 text-right font-medium">Qualifying Allocation</th>
-                  <th className="px-6 py-3 text-right font-medium">Commission</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Action</th>
+                  <th scope="col" className="px-6 py-3 font-medium">ID</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Referrer</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Invited Client</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Joined</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Qualifying Allocation</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Commission</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -109,6 +131,17 @@ export function AdminReferralsPage() {
                     colSpan={8}
                     title="No referral records match your filters"
                     description="Clear your search keyword or status filter to view all referral invitations."
+                    action={
+                      hasFilters ? (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="h-9 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Clear Filters
+                        </button>
+                      ) : undefined
+                    }
                   />
                 ) : (
                   filtered.map((ref) => (
@@ -135,7 +168,8 @@ export function AdminReferralsPage() {
                         {ref.status !== "Paid" ? (
                           <button
                             type="button"
-                            onClick={() => settleCommission(ref.id, ref.referrerName)}
+                            onClick={() => setSettleTarget(ref)}
+                            aria-label={`Mark referral ${ref.id} paid for ${ref.referrerName}`}
                             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                           >
                             Mark Paid
@@ -152,6 +186,28 @@ export function AdminReferralsPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(settleTarget)}
+        onClose={() => setSettleTarget(null)}
+        onConfirm={() => {
+          if (!settleTarget) return;
+          settleCommission(settleTarget.id, settleTarget.referrerName);
+          setSettleTarget(null);
+        }}
+        title="Settle Referral Commission?"
+        subtitle={
+          settleTarget
+            ? `${settleTarget.id} · ${settleTarget.referrerName} (Invited ${settleTarget.referredUserName})`
+            : undefined
+        }
+        description={
+          settleTarget
+            ? `This credits ${formatNaira(settleTarget.commissionEarned)} to ${settleTarget.referrerName}'s Available Balance, records a Referral Commission ledger entry, and marks the referral as Paid.`
+            : ""
+        }
+        confirmLabel="Confirm & Credit Commission"
+      />
     </AdminDashboardLayout>
   );
 }

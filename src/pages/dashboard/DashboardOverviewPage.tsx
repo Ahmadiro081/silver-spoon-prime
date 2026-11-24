@@ -21,7 +21,11 @@ import { TransactionReceiptModal } from "@/components/common/TransactionReceiptM
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
 import type { TransactionRecord } from "@/types/domain";
-import { buildUserPortfolioHistory, calculateInvestmentProgress } from "@/utils/calculations";
+import {
+  buildUserPortfolioHistory,
+  calculateInvestmentProgress,
+  getTransactionLedgerImpact,
+} from "@/utils/calculations";
 import { daysRemaining, formatCompactNaira, formatDate, formatNaira } from "@/utils/format";
 
 export function DashboardOverviewPage() {
@@ -47,7 +51,7 @@ export function DashboardOverviewPage() {
           to="/dashboard/wallet"
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground whitespace-nowrap transition-colors hover:bg-primary/90"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Fund Wallet
         </Link>
       }
@@ -147,7 +151,11 @@ export function DashboardOverviewPage() {
                 </Link>
               </div>
             ) : (
-              <div className="mt-6 h-[270px] w-full">
+              <div
+                className="mt-6 h-[270px] w-full"
+                role="img"
+                aria-label="7-month portfolio balance and allocated principal trajectory chart"
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
@@ -184,6 +192,7 @@ export function DashboardOverviewPage() {
                         backgroundColor: "var(--color-card)",
                         border: "1px solid var(--color-border)",
                         borderRadius: "10px",
+                        color: "var(--color-foreground)",
                         fontSize: "12px",
                       }}
                     />
@@ -250,7 +259,14 @@ export function DashboardOverviewPage() {
                             {formatNaira(inv.principal)}
                           </p>
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          role="progressbar"
+                          aria-valuenow={pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${inv.planName} maturity progress`}
+                          className="h-1.5 w-full overflow-hidden rounded-full bg-secondary"
+                        >
                           <div
                             className="h-full rounded-full bg-primary transition-all"
                             style={{ width: `${pct}%` }}
@@ -306,13 +322,13 @@ export function DashboardOverviewPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Reference</th>
-                  <th className="px-6 py-3 font-medium">Type</th>
-                  <th className="px-6 py-3 font-medium">Channel</th>
-                  <th className="px-6 py-3 font-medium">Date</th>
-                  <th className="px-6 py-3 text-right font-medium">Amount</th>
-                  <th className="px-6 py-3 text-right font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Receipt</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Reference</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Type</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Channel</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Date</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Receipt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -332,10 +348,13 @@ export function DashboardOverviewPage() {
                   />
                 ) : (
                   recentTxns.map((txn) => {
-                    const inflow =
-                      txn.type === "Deposit" ||
-                      txn.type === "Realized Return" ||
-                      txn.type === "Referral Commission";
+                    const impact = getTransactionLedgerImpact(txn);
+                    const amountTone =
+                      txn.status === "Declined"
+                        ? "text-muted-foreground line-through"
+                        : impact.isInflow
+                          ? "text-success"
+                          : "text-foreground";
                     return (
                       <tr
                         key={txn.id}
@@ -347,10 +366,10 @@ export function DashboardOverviewPage() {
                         </td>
                         <td className="px-6 py-3 font-medium text-foreground">
                           <span className="inline-flex items-center gap-1.5">
-                            {inflow ? (
-                              <ArrowDownLeft className="h-3.5 w-3.5 text-success" />
+                            {impact.isInflow ? (
+                              <ArrowDownLeft className="h-3.5 w-3.5 text-success" aria-hidden="true" />
                             ) : (
-                              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                             )}
                             {txn.type}
                           </span>
@@ -359,13 +378,16 @@ export function DashboardOverviewPage() {
                         <td className="font-tabular px-6 py-3 text-xs text-muted-foreground">
                           {formatDate(txn.createdAt)}
                         </td>
-                        <td
-                          className={`font-tabular px-6 py-3 text-right font-semibold ${
-                            inflow ? "text-success" : "text-foreground"
-                          }`}
-                        >
-                          {inflow ? "+" : "-"}
-                          {formatNaira(txn.amount)}
+                        <td className="font-tabular px-6 py-3 text-right whitespace-nowrap">
+                          <span className={`font-semibold ${amountTone}`}>
+                            {impact.sign}
+                            {formatNaira(txn.amount)}
+                          </span>
+                          {txn.fee > 0 && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              Fee: {formatNaira(txn.fee)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-3 text-right">
                           <StatusText status={txn.status} />
@@ -380,7 +402,7 @@ export function DashboardOverviewPage() {
                             aria-label={`View receipt for ${txn.reference}`}
                             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary"
                           >
-                            <Receipt className="h-3 w-3" />
+                            <Receipt className="h-3 w-3" aria-hidden="true" />
                             Receipt
                           </button>
                         </td>

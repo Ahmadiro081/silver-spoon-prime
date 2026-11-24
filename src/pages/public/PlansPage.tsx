@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
 import { PublicLayout } from "@/layouts/PublicLayout";
-import { RiskDisclosure, SegmentedFilter, StatusText } from "@/components/common/Primitives";
+import {
+  EmptyState,
+  RiskDisclosure,
+  SegmentedFilter,
+  StatusText,
+} from "@/components/common/Primitives";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
 import type { RiskBand } from "@/types/domain";
@@ -33,6 +38,7 @@ export function PlansPage() {
             </div>
 
             <SegmentedFilter
+              ariaLabel="Filter investment plans by risk band"
               value={riskFilter}
               onChange={setRiskFilter}
               options={[
@@ -47,6 +53,21 @@ export function PlansPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        {activePlans.length === 0 ? (
+          <EmptyState
+            title="No mandates match this risk band"
+            description="No active mandates are currently available under the selected risk classification."
+            action={
+              <button
+                type="button"
+                onClick={() => setRiskFilter("ALL")}
+                className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+              >
+                Show All Risk Bands
+              </button>
+            }
+          />
+        ) : (
         <div className="grid gap-6 md:grid-cols-2">
           {activePlans.map((plan) => (
             <article
@@ -70,24 +91,24 @@ export function PlansPage() {
                   {plan.description}
                 </p>
 
-                <div className="mt-6 grid grid-cols-3 gap-4 border-y border-border py-4">
-                  <div>
+                <div className="mt-6 grid grid-cols-3 gap-2 border-y border-border py-4 sm:gap-4">
+                  <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground">Target Return</p>
-                    <p className="font-tabular mt-1 text-2xl font-semibold text-foreground">
+                    <p className="font-tabular mt-1 text-xl font-semibold text-foreground sm:text-2xl">
                       {plan.targetReturnPercent}%
                     </p>
                     <p className="text-[11px] text-muted-foreground">Illustrative</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground">Duration</p>
-                    <p className="font-tabular mt-1 text-2xl font-semibold text-foreground">
+                    <p className="font-tabular mt-1 text-xl font-semibold text-foreground sm:text-2xl">
                       {plan.durationDays}d
                     </p>
-                    <p className="text-[11px] text-muted-foreground">{plan.payoutFrequency}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{plan.payoutFrequency}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground">Mgmt Fee</p>
-                    <p className="font-tabular mt-1 text-2xl font-semibold text-foreground">
+                    <p className="font-tabular mt-1 text-xl font-semibold text-foreground sm:text-2xl">
                       {plan.managementFeePercent}%
                     </p>
                     <p className="text-[11px] text-muted-foreground">Annualized</p>
@@ -126,7 +147,7 @@ export function PlansPage() {
                 <ul className="mt-5 space-y-1.5 border-t border-border pt-4 text-xs text-muted-foreground">
                   {plan.perks.map((perk) => (
                     <li key={perk} className="flex items-start gap-2">
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
                       <span>{perk}</span>
                     </li>
                   ))}
@@ -146,6 +167,7 @@ export function PlansPage() {
             </article>
           ))}
         </div>
+        )}
 
         {/* Comparison Matrix */}
         <div className="surface-card mt-12 overflow-hidden">
@@ -158,12 +180,12 @@ export function PlansPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/50 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Mandate</th>
-                  <th className="px-6 py-3 font-medium">Minimum</th>
-                  <th className="px-6 py-3 font-medium">Maximum</th>
-                  <th className="px-6 py-3 font-medium">Tenor</th>
-                  <th className="px-6 py-3 font-medium">Target Return*</th>
-                  <th className="px-6 py-3 font-medium">Risk Band</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Mandate</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Minimum</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Maximum</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Tenor</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Target Return*</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Risk Band</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

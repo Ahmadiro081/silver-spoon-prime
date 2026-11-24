@@ -19,7 +19,21 @@ import { useAppState } from "@/context/AppStateContext";
 import { buildPlatformMonthlyMetrics } from "@/utils/calculations";
 import { formatCompactNaira, formatNaira, formatNumber } from "@/utils/format";
 
-const PIE_COLORS = ["#0f1d36", "#4b6584", "#15803d", "#b45309", "#64748b"];
+const PIE_COLORS = [
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+];
+
+const TOOLTIP_STYLE = {
+  backgroundColor: "var(--color-card)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "10px",
+  color: "var(--color-foreground)",
+  fontSize: "12px",
+};
 
 export function AdminAnalyticsPage() {
   const { users, transactions, investments, plans } = useAppState();
@@ -61,6 +75,8 @@ export function AdminAnalyticsPage() {
   const cumulativeRealized = transactions
     .filter((t) => t.type === "Realized Return" && t.status === "Completed")
     .reduce((s, t) => s + t.amount, 0);
+  const hasAumData = monthlySeries.some((m) => m.portfolioValue > 0);
+  const hasUserGrowthData = monthlySeries.some((m) => m.activeUsers > 0);
 
   return (
     <AdminDashboardLayout title="Financial Analytics" breadcrumb="Analytics">
@@ -105,31 +121,39 @@ export function AdminAnalyticsPage() {
             <p className="text-xs text-muted-foreground">
               Live ledger-derived assets under administration across all active investor accounts
             </p>
-            <div className="mt-5 h-[270px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlySeries}>
-                  <defs>
-                    <linearGradient id="aumGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-chart-1)" stopOpacity={0.22} />
-                      <stop offset="95%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={(v) => formatCompactNaira(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={66} />
-                  <Tooltip
-                    formatter={(v: number) => formatNaira(v)}
-                    contentStyle={{
-                      backgroundColor: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Area type="monotone" dataKey="portfolioValue" name="Portfolio AUM" stroke="var(--color-chart-1)" strokeWidth={2} fill="url(#aumGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {!hasAumData ? (
+              <div className="mt-6">
+                <EmptyState
+                  title="No portfolio AUM data yet"
+                  description="Portfolio assets under administration will plot here once investors fund wallets or open mandates."
+                />
+              </div>
+            ) : (
+              <div
+                className="mt-5 h-[270px] w-full"
+                role="img"
+                aria-label="Portfolio assets under administration Naira trajectory area chart"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlySeries}>
+                    <defs>
+                      <linearGradient id="aumGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--color-chart-1)" stopOpacity={0.22} />
+                        <stop offset="95%" stopColor="var(--color-chart-1)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v) => formatCompactNaira(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={66} />
+                    <Tooltip
+                      formatter={(v: number) => formatNaira(v)}
+                      contentStyle={TOOLTIP_STYLE}
+                    />
+                    <Area type="monotone" dataKey="portfolioValue" name="Portfolio AUM" stroke="var(--color-chart-1)" strokeWidth={2} fill="url(#aumGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           <div className="surface-card p-6 lg:col-span-4">
@@ -144,7 +168,11 @@ export function AdminAnalyticsPage() {
               </div>
             ) : (
               <>
-                <div className="mt-4 h-[210px] w-full">
+                <div
+                  className="mt-4 h-[210px] w-full"
+                  role="img"
+                  aria-label="Investment mandate principal distribution donut chart"
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -159,7 +187,10 @@ export function AdminAnalyticsPage() {
                           <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v: number) => formatNaira(v)} />
+                      <Tooltip
+                        formatter={(v: number) => formatNaira(v)}
+                        contentStyle={TOOLTIP_STYLE}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -168,6 +199,7 @@ export function AdminAnalyticsPage() {
                     <div key={d.name} className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-2 truncate text-muted-foreground">
                         <span
+                          aria-hidden="true"
                           className="h-2.5 w-2.5 shrink-0 rounded-xs"
                           style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
                         />
@@ -191,25 +223,33 @@ export function AdminAnalyticsPage() {
           <p className="text-xs text-muted-foreground">
             Rolling 7-month registered investor count computed from live account records
           </p>
-          <div className="mt-5 h-[240px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlySeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tickFormatter={(v) => formatNumber(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={48} />
-                <Tooltip
-                  formatter={(v: number) => formatNumber(v)}
-                  contentStyle={{
-                    backgroundColor: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "10px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="activeUsers" name="Active Accounts" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {!hasUserGrowthData ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No registered investor growth data yet"
+                description="Active investor counts will chart here as clients register accounts."
+              />
+            </div>
+          ) : (
+            <div
+              className="mt-5 h-[240px] w-full"
+              role="img"
+              aria-label="Rolling 7-month active investor accounts bar chart"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlySeries}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tickFormatter={(v) => formatNumber(Number(v))} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={48} />
+                  <Tooltip
+                    formatter={(v: number) => formatNumber(v)}
+                    contentStyle={TOOLTIP_STYLE}
+                  />
+                  <Bar dataKey="activeUsers" name="Active Accounts" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </section>
       </div>
     </AdminDashboardLayout>

@@ -1,8 +1,10 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { MotionConfig } from "motion/react";
 import { AdminRoute, InvestorRoute } from "@/components/auth/RouteGuards";
 import { PageLoadingSkeleton } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
+import { resolvePageTitle } from "@/utils/pageTitle";
 
 // Public pages (lazy-loaded route chunks)
 const HomePage = lazy(() =>
@@ -118,11 +120,19 @@ const AdminSettingsPage = lazy(() =>
   import("@/pages/admin/AdminSettingsPage").then((m) => ({ default: m.AdminSettingsPage })),
 );
 
-function ScrollToTop() {
-  const { pathname } = useLocation();
+function RouteNavigationManager() {
+  const { pathname, hash } = useLocation();
   useEffect(() => {
+    document.title = resolvePageTitle(pathname);
+    if (hash) {
+      const target = document.getElementById(hash.slice(1));
+      if (target) {
+        target.scrollIntoView();
+        return;
+      }
+    }
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-  }, [pathname]);
+  }, [pathname, hash]);
   return null;
 }
 
@@ -140,35 +150,36 @@ function NotFoundPage() {
       : "Open Dashboard";
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
       <p className="font-tabular text-xs font-medium text-muted-foreground">Error 404</p>
       <h1 className="font-display mt-3 text-4xl font-medium text-foreground">Page not found</h1>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
         The SILVER SPOON page you requested does not exist or has been reorganized.
       </p>
-      <div className="mt-6 flex gap-3">
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link
           to="/"
-          className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Return Home
         </Link>
         <Link
           to={workspacePath}
-          className="inline-flex h-10 items-center rounded-lg border border-border px-5 text-sm font-medium text-foreground hover:bg-secondary"
+          className="inline-flex h-10 items-center rounded-lg border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
         >
           {workspaceLabel}
         </Link>
       </div>
-    </div>
+    </main>
   );
 }
 
 export function App() {
   return (
-    <BrowserRouter>
-      <ScrollToTop />
-      <Suspense fallback={<PageLoadingSkeleton />}>
+    <MotionConfig reducedMotion="user">
+      <BrowserRouter>
+        <RouteNavigationManager />
+        <Suspense fallback={<PageLoadingSkeleton />}>
         <Routes>
           {/* Public Website */}
           <Route path="/" element={<HomePage />} />
@@ -364,7 +375,8 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
-    </BrowserRouter>
+      </BrowserRouter>
+    </MotionConfig>
   );
 }
 

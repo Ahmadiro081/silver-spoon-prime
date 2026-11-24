@@ -18,7 +18,7 @@ export function SafeImage({ src, alt, className = "", fallbackTitle }: SafeImage
         role="img"
         aria-label={alt}
       >
-        <Building2 className="h-8 w-8 opacity-60" />
+        <Building2 className="h-8 w-8 opacity-60" aria-hidden="true" />
         {fallbackTitle && <p className="mt-2 text-xs font-medium">{fallbackTitle}</p>}
       </div>
     );
@@ -28,6 +28,7 @@ export function SafeImage({ src, alt, className = "", fallbackTitle }: SafeImage
     <img
       src={src}
       alt={alt}
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}

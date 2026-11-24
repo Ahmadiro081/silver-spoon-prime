@@ -34,7 +34,7 @@ function readOptionalEnv(value: unknown): string | null {
 }
 
 export function getSupabasePublicConfig(): SupabasePublicConfig {
-  const env = import.meta.env as Record<string, unknown>;
+  const env = (import.meta.env ?? {}) as Record<string, unknown>;
   const rawProvider = readOptionalEnv(env.VITE_DATA_PROVIDER)?.toLowerCase();
   const requestedProvider: DataProviderId = rawProvider === "supabase" ? "supabase" : "mock";
 

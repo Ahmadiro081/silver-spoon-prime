@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ShieldAlert, ArrowLeft, ArrowLeftRight } from "lucide-react";
-import { toast } from "sonner";
+import { ShieldAlert, ArrowLeft, LogOut } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { useAppState } from "@/context/AppStateContext";
 import type { UserRole } from "@/types/domain";
@@ -14,20 +13,16 @@ function UnauthorizedRoleView({
   currentRole: UserRole;
 }) {
   const navigate = useNavigate();
-  const { switchRoleDemo } = useAppState();
+  const { logout } = useAppState();
   const isNeedAdmin = requiredRole === "admin";
 
   const handleReturnHomeWorkspace = () => {
     navigate(currentRole === "admin" ? "/admin" : "/dashboard", { replace: true });
   };
 
-  const handleSwitchDemo = () => {
-    switchRoleDemo(requiredRole);
-    toast.success(
-      isNeedAdmin
-        ? "Switched to Demo Administrator session."
-        : "Switched to Demo Investor session.",
-    );
+  const handleSignOut = () => {
+    logout();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -40,7 +35,7 @@ function UnauthorizedRoleView({
           <ShieldAlert className="h-5 w-5 text-warning" aria-hidden="true" />
         </div>
         <p className="mt-4 text-xs font-medium text-muted-foreground">
-          Role Separation Control · Frontend Demonstration
+          Role Separation Control · Access Restricted
         </p>
         <h1 className="font-display mt-2 text-2xl font-medium text-foreground">
           {isNeedAdmin ? "Administrator Access Required" : "Investor Workspace Isolation"}
@@ -48,7 +43,7 @@ function UnauthorizedRoleView({
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {isNeedAdmin
             ? "Your active session is signed in as an Investor. Operations, treasury approval queues, and platform governance controls are restricted to Administrator accounts."
-            : "Your active session is signed in as an Administrator. To prevent mixing administrative credentials with client financial ledgers, please switch to an Investor account to open the Client Dashboard."}
+            : "Your active session is signed in as an Administrator. To prevent mixing administrative credentials with client financial ledgers, sign in with an Investor account to open the Client Dashboard."}
         </p>
 
         <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -57,22 +52,22 @@ function UnauthorizedRoleView({
             onClick={handleReturnHomeWorkspace}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground whitespace-nowrap transition-colors hover:bg-primary/90"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             {currentRole === "admin" ? "Return to Admin Console" : "Return to Client Dashboard"}
           </button>
           <button
             type="button"
-            onClick={handleSwitchDemo}
+            onClick={handleSignOut}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 text-xs font-medium text-foreground whitespace-nowrap transition-colors hover:bg-secondary"
           >
-            <ArrowLeftRight className="h-3.5 w-3.5" />
-            {isNeedAdmin ? "Switch to Demo Admin" : "Switch to Demo Investor"}
+            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+            Sign Out
           </button>
         </div>
 
         <p className="mt-6 border-t border-border pt-4 text-[11px] text-muted-foreground">
-          Note: Frontend route guards demonstrate role isolation only. Authoritative RBAC and Row
-          Level Security (RLS) will be enforced server-side upon backend integration.
+          Frontend route guards enforce role boundaries in this standalone test environment.
+          Authoritative server-side RBAC is enforced upon backend integration.
         </p>
       </div>
     </div>

@@ -1,11 +1,18 @@
 import { useState } from "react";
-import { Download, Receipt, Search } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
-import { SegmentedFilter, StatusText, TableEmptyRow } from "@/components/common/Primitives";
+import {
+  SearchInput,
+  SegmentedFilter,
+  StatusText,
+  TableEmptyRow,
+} from "@/components/common/Primitives";
 import { TransactionReceiptModal } from "@/components/common/TransactionReceiptModal";
 import { useAppState } from "@/context/AppStateContext";
 import type { TransactionRecord, TransactionStatus, TransactionType } from "@/types/domain";
+import { getTransactionLedgerImpact } from "@/utils/calculations";
+import { buildCsvContent, downloadCsvFile } from "@/utils/csv";
 import { formatDateTime, formatNaira } from "@/utils/format";
 
 export function AdminTransactionsPage() {
@@ -14,6 +21,14 @@ export function AdminTransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<"ALL" | TransactionType>("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | TransactionStatus>("ALL");
   const [selectedTxn, setSelectedTxn] = useState<TransactionRecord | null>(null);
+
+  const hasFilters = Boolean(query.trim()) || typeFilter !== "ALL" || statusFilter !== "ALL";
+
+  const clearFilters = () => {
+    setQuery("");
+    setTypeFilter("ALL");
+    setStatusFilter("ALL");
+  };
 
   const filtered = transactions.filter((t) => {
     const matchesType = typeFilter === "ALL" || t.type === typeFilter;
@@ -29,21 +44,36 @@ export function AdminTransactionsPage() {
   });
 
   const exportCsv = () => {
-    const header = "Reference,Client,Email,Type,Channel,Amount (NGN),Status,Timestamp\n";
-    const rows = filtered
-      .map(
-        (t) =>
-          `"${t.reference}","${t.userName}","${t.userEmail}","${t.type}","${t.channel}",${t.amount},"${t.status}","${t.createdAt}"`,
-      )
-      .join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "silver-spoon-admin-ledger.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Downloaded platform transaction ledger CSV.");
+    const csvContent = buildCsvContent(
+      [
+        "Ledger Mode",
+        "Reference",
+        "Client",
+        "Email",
+        "Type",
+        "Channel",
+        "Amount (NGN)",
+        "Fee (NGN)",
+        "Status",
+        "Note",
+        "Timestamp",
+      ],
+      filtered.map((t) => [
+        "SIMULATED TRANSACTION (TEST ENVIRONMENT)",
+        t.reference,
+        t.userName,
+        t.userEmail,
+        t.type,
+        t.channel,
+        t.amount,
+        t.fee,
+        t.status,
+        t.note ?? "",
+        t.createdAt,
+      ]),
+    );
+    downloadCsvFile("silver-spoon-simulated-admin-ledger.csv", csvContent);
+    toast.success("Downloaded simulated platform transaction ledger CSV.");
   };
 
   return (
@@ -57,7 +87,7 @@ export function AdminTransactionsPage() {
           disabled={filtered.length === 0}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Download className="h-3.5 w-3.5" />
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
           Export CSV
         </button>
       }
@@ -65,17 +95,15 @@ export function AdminTransactionsPage() {
       <div className="space-y-5">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search reference, investor, or bank..."
-                className="h-10 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search reference, investor, or bank..."
+              ariaLabel="Search transactions by reference, investor, or bank"
+              className="w-full max-w-sm"
+            />
             <SegmentedFilter
+              ariaLabel="Filter transactions by status"
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
@@ -88,6 +116,7 @@ export function AdminTransactionsPage() {
           </div>
 
           <SegmentedFilter
+            ariaLabel="Filter transactions by type"
             value={typeFilter}
             onChange={setTypeFilter}
             options={[
@@ -101,68 +130,120 @@ export function AdminTransactionsPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite" className="font-tabular">
+            Showing {filtered.length} of {transactions.length} platform ledger entries
+          </p>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Reference</th>
-                  <th className="px-6 py-3 font-medium">Client</th>
-                  <th className="px-6 py-3 font-medium">Type</th>
-                  <th className="px-6 py-3 font-medium">Channel</th>
-                  <th className="px-6 py-3 font-medium">Timestamp</th>
-                  <th className="px-6 py-3 text-right font-medium">Amount</th>
-                  <th className="px-6 py-3 text-right font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Receipt</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Reference</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Client</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Type</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Channel</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Timestamp</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Receipt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.length === 0 ? (
                   <TableEmptyRow
                     colSpan={8}
-                    title="No platform transactions match your filters"
-                    description="Adjust the search keyword, transaction type, or status filter."
-                  />
-                ) : (
-                  filtered.map((txn) => (
-                    <tr
-                      key={txn.id}
-                      onClick={() => setSelectedTxn(txn)}
-                      className="cursor-pointer hover:bg-secondary/25"
-                    >
-                      <td className="font-tabular px-6 py-3 text-xs text-muted-foreground">
-                        {txn.reference}
-                      </td>
-                      <td className="px-6 py-3 text-xs">
-                        <p className="font-medium text-foreground">{txn.userName}</p>
-                        <p className="text-muted-foreground">{txn.userEmail}</p>
-                      </td>
-                      <td className="px-6 py-3 font-medium text-foreground">{txn.type}</td>
-                      <td className="px-6 py-3 text-xs text-muted-foreground">{txn.channel}</td>
-                      <td className="font-tabular px-6 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(txn.createdAt)}
-                      </td>
-                      <td className="font-tabular px-6 py-3 text-right font-semibold text-foreground whitespace-nowrap">
-                        {formatNaira(txn.amount)}
-                      </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <StatusText status={txn.status} />
-                      </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                    title={
+                      transactions.length === 0
+                        ? "No platform transactions recorded yet"
+                        : "No platform transactions match your filters"
+                    }
+                    description={
+                      transactions.length === 0
+                        ? "Simulated deposits, allocations, returns, and withdrawals will appear here once client activity begins."
+                        : "Adjust the search keyword, transaction type, or status filter."
+                    }
+                    action={
+                      hasFilters ? (
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTxn(txn);
-                          }}
-                          className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground hover:bg-secondary"
+                          onClick={clearFilters}
+                          className="h-9 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground hover:bg-secondary"
                         >
-                          <Receipt className="h-3.5 w-3.5" />
-                          View
+                          Clear Filters
                         </button>
-                      </td>
-                    </tr>
-                  ))
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  filtered.map((txn) => {
+                    const impact = getTransactionLedgerImpact(txn);
+                    const amountTone =
+                      txn.status === "Declined"
+                        ? "text-muted-foreground line-through"
+                        : impact.isInflow
+                          ? "text-success"
+                          : "text-foreground";
+                    return (
+                      <tr
+                        key={txn.id}
+                        onClick={() => setSelectedTxn(txn)}
+                        className="cursor-pointer hover:bg-secondary/25"
+                      >
+                        <td className="font-tabular px-6 py-3 text-xs text-muted-foreground">
+                          {txn.reference}
+                        </td>
+                        <td className="px-6 py-3 text-xs">
+                          <p className="font-medium text-foreground">{txn.userName}</p>
+                          <p className="text-muted-foreground">{txn.userEmail}</p>
+                        </td>
+                        <td className="px-6 py-3 font-medium text-foreground">{txn.type}</td>
+                        <td className="px-6 py-3 text-xs text-muted-foreground">{txn.channel}</td>
+                        <td className="font-tabular px-6 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDateTime(txn.createdAt)}
+                        </td>
+                        <td className="font-tabular px-6 py-3 text-right whitespace-nowrap">
+                          <p className={`font-semibold ${amountTone}`}>
+                            {impact.isInflow ? "+" : "-"}
+                            {formatNaira(txn.amount)}
+                          </p>
+                          {txn.fee > 0 && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Fee {formatNaira(txn.fee)}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-right whitespace-nowrap">
+                          <StatusText status={txn.status} />
+                        </td>
+                        <td className="px-6 py-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTxn(txn);
+                            }}
+                            aria-label={`View receipt for ${txn.reference}`}
+                            className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground hover:bg-secondary"
+                          >
+                            <Receipt className="h-3.5 w-3.5" aria-hidden="true" />
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

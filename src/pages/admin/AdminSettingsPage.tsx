@@ -1,31 +1,88 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
+import { ConfirmDialog } from "@/components/common/Modal";
+import { FormAlert } from "@/components/common/Primitives";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
+import { SETTINGS_LIMITS, validatePlatformSettings } from "@/services/platformService";
+import type { PlatformSettings } from "@/types/domain";
+
+interface SettingsDraft {
+  minDepositAmount: string;
+  maxDailyWithdrawal: string;
+  autoApproveDepositsUnder: string;
+  referralCommissionPercent: string;
+  allowNewRegistrations: boolean;
+  requireKycForWithdrawals: boolean;
+  maintenanceMode: boolean;
+}
+
+function toDraft(settings: PlatformSettings): SettingsDraft {
+  return {
+    minDepositAmount: String(settings.minDepositAmount),
+    maxDailyWithdrawal: String(settings.maxDailyWithdrawal),
+    autoApproveDepositsUnder: String(settings.autoApproveDepositsUnder),
+    referralCommissionPercent: String(settings.referralCommissionPercent),
+    allowNewRegistrations: settings.allowNewRegistrations,
+    requireKycForWithdrawals: settings.requireKycForWithdrawals,
+    maintenanceMode: settings.maintenanceMode,
+  };
+}
+
+function parseStrictNumber(raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return Number.NaN;
+  return Number(trimmed);
+}
 
 export function AdminSettingsPage() {
   const { settings, resetVersion, adminUpdateSettings, resetDemoState } = useAppState();
-  const [form, setForm] = useState(settings);
+  const [draft, setDraft] = useState<SettingsDraft>(() => toDraft(settings));
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   useEffect(() => {
-    setForm(settings);
+    setDraft(toDraft(settings));
+    setValidationError(null);
   }, [settings, resetVersion]);
 
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
-    const res = adminUpdateSettings(form);
-    if (!res.ok) {
-      toast.error(res.error ?? "Unable to update platform settings.");
+    const candidate: PlatformSettings = {
+      ...settings,
+      minDepositAmount: parseStrictNumber(draft.minDepositAmount),
+      maxDailyWithdrawal: parseStrictNumber(draft.maxDailyWithdrawal),
+      autoApproveDepositsUnder: parseStrictNumber(draft.autoApproveDepositsUnder),
+      referralCommissionPercent: parseStrictNumber(draft.referralCommissionPercent),
+      allowNewRegistrations: draft.allowNewRegistrations,
+      requireKycForWithdrawals: draft.requireKycForWithdrawals,
+      maintenanceMode: draft.maintenanceMode,
+    };
+
+    const preCheck = validatePlatformSettings(candidate);
+    if (!preCheck.ok) {
+      const msg = preCheck.error ?? "Invalid platform settings configuration.";
+      setValidationError(msg);
+      toast.error(msg);
       return;
     }
+
+    const res = adminUpdateSettings(candidate);
+    if (!res.ok) {
+      const msg = res.error ?? "Unable to update platform settings.";
+      setValidationError(msg);
+      toast.error(msg);
+      return;
+    }
+    setValidationError(null);
     toast.success("Platform operational settings updated and logged.");
   };
 
   return (
     <AdminDashboardLayout title="Platform Settings" breadcrumb="Settings">
       <div className="max-w-4xl space-y-6">
-        <form onSubmit={handleSave} className="surface-card space-y-6 p-6">
+        <form onSubmit={handleSave} noValidate className="surface-card space-y-6 p-6">
           <div>
             <h2 className="font-display text-xl font-medium text-foreground">
               Treasury & Operational Controls
@@ -36,60 +93,94 @@ export function AdminSettingsPage() {
             </p>
           </div>
 
+          {validationError && <FormAlert>{validationError}</FormAlert>}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-foreground">
+              <label
+                htmlFor="set-min-deposit"
+                className="block text-xs font-medium text-foreground"
+              >
                 Minimum Deposit Amount (₦)
               </label>
               <input
+                id="set-min-deposit"
                 type="number"
-                value={form.minDepositAmount}
-                onChange={(e) => setForm({ ...form, minDepositAmount: Number(e.target.value) })}
-                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                min={SETTINGS_LIMITS.minDepositFloor}
+                max={SETTINGS_LIMITS.minDepositCeiling}
+                value={draft.minDepositAmount}
+                onChange={(e) => {
+                  setDraft({ ...draft, minDepositAmount: e.target.value });
+                  if (validationError) setValidationError(null);
+                }}
+                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-foreground">
+              <label
+                htmlFor="set-max-withdrawal"
+                className="block text-xs font-medium text-foreground"
+              >
                 Max Daily Withdrawal Limit (₦)
               </label>
               <input
+                id="set-max-withdrawal"
                 type="number"
-                value={form.maxDailyWithdrawal}
-                onChange={(e) => setForm({ ...form, maxDailyWithdrawal: Number(e.target.value) })}
-                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                min={SETTINGS_LIMITS.minDailyWithdrawal}
+                max={SETTINGS_LIMITS.maxDailyWithdrawalCeiling}
+                value={draft.maxDailyWithdrawal}
+                onChange={(e) => {
+                  setDraft({ ...draft, maxDailyWithdrawal: e.target.value });
+                  if (validationError) setValidationError(null);
+                }}
+                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-foreground">
+              <label
+                htmlFor="set-auto-approve"
+                className="block text-xs font-medium text-foreground"
+              >
                 Auto-Approve Simulated Deposits Under (₦)
               </label>
               <input
+                id="set-auto-approve"
                 type="number"
-                value={form.autoApproveDepositsUnder}
-                onChange={(e) =>
-                  setForm({ ...form, autoApproveDepositsUnder: Number(e.target.value) })
-                }
-                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                min={0}
+                max={SETTINGS_LIMITS.maxAutoApproveDeposit}
+                value={draft.autoApproveDepositsUnder}
+                onChange={(e) => {
+                  setDraft({ ...draft, autoApproveDepositsUnder: e.target.value });
+                  if (validationError) setValidationError(null);
+                }}
+                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-foreground">
+              <label
+                htmlFor="set-ref-commission"
+                className="block text-xs font-medium text-foreground"
+              >
                 Referral Commission Rate (%)
               </label>
               <input
+                id="set-ref-commission"
                 type="number"
                 step="0.5"
-                value={form.referralCommissionPercent}
-                onChange={(e) =>
-                  setForm({ ...form, referralCommissionPercent: Number(e.target.value) })
-                }
-                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                min={0}
+                max={SETTINGS_LIMITS.maxReferralCommissionPercent}
+                value={draft.referralCommissionPercent}
+                onChange={(e) => {
+                  setDraft({ ...draft, referralCommissionPercent: e.target.value });
+                  if (validationError) setValidationError(null);
+                }}
+                className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>
 
           <div className="space-y-3 border-t border-border pt-5 text-sm">
-            <label className="flex items-center justify-between gap-4">
+            <label className="flex cursor-pointer items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">Allow New Client Registrations</p>
                 <p className="text-xs text-muted-foreground">
@@ -98,13 +189,13 @@ export function AdminSettingsPage() {
               </div>
               <input
                 type="checkbox"
-                checked={form.allowNewRegistrations}
-                onChange={(e) => setForm({ ...form, allowNewRegistrations: e.target.checked })}
-                className="h-4 w-4 accent-primary"
+                checked={draft.allowNewRegistrations}
+                onChange={(e) => setDraft({ ...draft, allowNewRegistrations: e.target.checked })}
+                className="h-4 w-4 shrink-0 accent-primary"
               />
             </label>
 
-            <label className="flex items-center justify-between gap-4">
+            <label className="flex cursor-pointer items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">Require Tier 2+ KYC for Withdrawals</p>
                 <p className="text-xs text-muted-foreground">
@@ -113,13 +204,15 @@ export function AdminSettingsPage() {
               </div>
               <input
                 type="checkbox"
-                checked={form.requireKycForWithdrawals}
-                onChange={(e) => setForm({ ...form, requireKycForWithdrawals: e.target.checked })}
-                className="h-4 w-4 accent-primary"
+                checked={draft.requireKycForWithdrawals}
+                onChange={(e) =>
+                  setDraft({ ...draft, requireKycForWithdrawals: e.target.checked })
+                }
+                className="h-4 w-4 shrink-0 accent-primary"
               />
             </label>
 
-            <label className="flex items-center justify-between gap-4">
+            <label className="flex cursor-pointer items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">Maintenance Mode Flag</p>
                 <p className="text-xs text-muted-foreground">
@@ -128,9 +221,9 @@ export function AdminSettingsPage() {
               </div>
               <input
                 type="checkbox"
-                checked={form.maintenanceMode}
-                onChange={(e) => setForm({ ...form, maintenanceMode: e.target.checked })}
-                className="h-4 w-4 accent-primary"
+                checked={draft.maintenanceMode}
+                onChange={(e) => setDraft({ ...draft, maintenanceMode: e.target.checked })}
+                className="h-4 w-4 shrink-0 accent-primary"
               />
             </label>
           </div>
@@ -138,13 +231,10 @@ export function AdminSettingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
             <button
               type="button"
-              onClick={() => {
-                resetDemoState();
-                toast.success("Restored factory mock ledger data.");
-              }}
-              className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+              onClick={() => setConfirmResetOpen(true)}
+              className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-destructive hover:bg-destructive/10"
             >
-              Reset Simulated Data
+              Clear Local Test Data
             </button>
             <button
               type="submit"
@@ -191,6 +281,21 @@ export function AdminSettingsPage() {
           </dl>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onClose={() => setConfirmResetOpen(false)}
+        onConfirm={() => {
+          resetDemoState();
+          setConfirmResetOpen(false);
+          toast.success("Cleared local test data and reset to a clean empty state.");
+        }}
+        title="Clear Local Test Data?"
+        subtitle="Reset Local Browser Storage"
+        description="This immediately removes all locally stored user accounts, simulated transactions, investments, KYC records, and custom settings from this browser, returning the test environment to a clean empty state."
+        confirmLabel="Clear All Data"
+        tone="destructive"
+      />
     </AdminDashboardLayout>
   );
 }

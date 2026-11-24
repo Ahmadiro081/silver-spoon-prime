@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
+import { EmptyState, FormAlert } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 import type { NotificationCategory } from "@/types/domain";
 import { formatDateTime } from "@/utils/format";
@@ -12,19 +13,30 @@ export function AdminNotificationsPage() {
   const [category, setCategory] = useState<NotificationCategory>("platform");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
   const investors = users.filter((u) => u.role === "investor");
 
   const handleSend = (e: FormEvent) => {
     e.preventDefault();
+    if (!title.trim()) {
+      setFormError("Please enter a notification headline.");
+      return;
+    }
+    if (!message.trim()) {
+      setFormError("Please enter a notification message body.");
+      return;
+    }
+
+    setFormError(null);
     const res = adminSendNotification({
       userId: recipient,
-      title,
-      message,
+      title: title.trim(),
+      message: message.trim(),
       category,
     });
     if (!res.ok) {
-      toast.error(res.error ?? "Unable to send notification.");
+      setFormError(res.error ?? "Unable to send notification.");
       return;
     }
     toast.success("Notification dispatched and logged.");
@@ -35,13 +47,15 @@ export function AdminNotificationsPage() {
   return (
     <AdminDashboardLayout title="Client Notifications" breadcrumb="Notifications">
       <div className="grid gap-6 lg:grid-cols-12">
-        <form onSubmit={handleSend} className="surface-card space-y-4 p-6 lg:col-span-5">
+        <form onSubmit={handleSend} noValidate className="surface-card space-y-4 p-6 lg:col-span-5">
           <h2 className="font-display text-xl font-medium text-foreground">
             Dispatch Notification
           </h2>
           <p className="text-xs text-muted-foreground">
             Send a broadcast notice to all clients or message an individual investor inbox.
           </p>
+
+          {formError && <FormAlert>{formError}</FormAlert>}
 
           <div>
             <label htmlFor="ntf-rec" className="block text-xs font-medium text-foreground">
@@ -51,7 +65,7 @@ export function AdminNotificationsPage() {
               id="ntf-rec"
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
-              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="ALL">All Registered Clients</option>
               {investors.map((u) => (
@@ -70,7 +84,7 @@ export function AdminNotificationsPage() {
               id="ntf-cat"
               value={category}
               onChange={(e) => setCategory(e.target.value as NotificationCategory)}
-              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="platform">Platform Announcement</option>
               <option value="investment">Investment Mandate Notice</option>
@@ -89,9 +103,12 @@ export function AdminNotificationsPage() {
               type="text"
               required
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (formError) setFormError(null);
+              }}
               placeholder="Q4 Treasury Settlement Schedule"
-              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -104,9 +121,12 @@ export function AdminNotificationsPage() {
               rows={4}
               required
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                if (formError) setFormError(null);
+              }}
               placeholder="Write a concise update for client dashboards..."
-              className="mt-1.5 w-full rounded-lg border border-input bg-background p-3 text-sm"
+              className="mt-1.5 w-full rounded-lg border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -114,7 +134,7 @@ export function AdminNotificationsPage() {
             type="submit"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
-            <Send className="h-3.5 w-3.5" />
+            <Send className="h-3.5 w-3.5" aria-hidden="true" />
             Send Notification
           </button>
         </form>
@@ -125,21 +145,30 @@ export function AdminNotificationsPage() {
               Dispatched Notices ({notifications.length})
             </h2>
           </div>
-          <div className="divide-y divide-border">
-            {notifications.map((n) => (
-              <div key={n.id} className="px-6 py-4">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="capitalize">{n.category}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>Target: {n.userId === "ALL" ? "All Clients" : n.userId}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="font-tabular">{formatDateTime(n.createdAt)}</span>
+          {notifications.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                title="No notices dispatched yet"
+                description="Broadcast announcements and targeted investor notices sent from this console will appear here."
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {notifications.map((n) => (
+                <div key={n.id} className="px-6 py-4">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="capitalize">{n.category}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Target: {n.userId === "ALL" ? "All Clients" : n.userId}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-tabular">{formatDateTime(n.createdAt)}</span>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{n.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{n.message}</p>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-foreground">{n.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{n.message}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </AdminDashboardLayout>

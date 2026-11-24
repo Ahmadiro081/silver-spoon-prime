@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { AuthLayout } from "@/layouts/AuthLayout";
+import { FormAlert } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 
 export function ForgotPasswordPage() {
@@ -32,8 +33,8 @@ export function ForgotPasswordPage() {
       }
     >
       {resetToken ? (
-        <div className="surface-card space-y-4 p-6 text-center">
-          <CheckCircle2 className="mx-auto h-8 w-8 text-success" />
+        <div className="surface-card space-y-4 p-6 text-center" role="status">
+          <CheckCircle2 className="mx-auto h-8 w-8 text-success" aria-hidden="true" />
           <div>
             <p className="text-sm font-semibold text-foreground">Simulated Recovery Token Issued</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -53,19 +54,12 @@ export function ForgotPasswordPage() {
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             Continue to Reset Password
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive"
-            >
-              {error}
-            </div>
-          )}
+          {error && <FormAlert>{error}</FormAlert>}
           <div>
             <label htmlFor="fp-email" className="block text-xs font-medium text-foreground">
               Registered Email
@@ -73,13 +67,14 @@ export function ForgotPasswordPage() {
             <input
               id="fp-email"
               type="email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="adaeze.okafor@silverspoon.ng"
+              placeholder="name@domain.ng"
               className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>

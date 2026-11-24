@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { CheckCircle2, Mail, MapPin, Phone } from "lucide-react";
 import { PublicLayout } from "@/layouts/PublicLayout";
+import { FormAlert } from "@/components/common/Primitives";
 import { APP_CONFIG } from "@/config/app";
 
 export function ContactPage() {
@@ -43,14 +44,14 @@ export function ContactPage() {
               <h2 className="font-display text-xl font-medium text-foreground">Office Directory</h2>
               <div className="mt-5 space-y-4 text-sm text-muted-foreground">
                 <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-foreground" aria-hidden="true" />
                   <div>
                     <p className="font-medium text-foreground">Lagos Headquarters</p>
                     <p>{APP_CONFIG.support.headquarters}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-foreground" aria-hidden="true" />
                   <div>
                     <p className="font-medium text-foreground">Email Channels</p>
                     <p>{APP_CONFIG.support.email}</p>
@@ -58,7 +59,7 @@ export function ContactPage() {
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Phone className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+                  <Phone className="mt-0.5 h-4 w-4 shrink-0 text-foreground" aria-hidden="true" />
                   <div>
                     <p className="font-medium text-foreground">Direct Desk</p>
                     <p className="font-tabular">{APP_CONFIG.support.phone}</p>
@@ -71,8 +72,8 @@ export function ContactPage() {
 
           <div className="surface-card p-6 sm:p-8 lg:col-span-7">
             {submitted ? (
-              <div className="py-10 text-center">
-                <CheckCircle2 className="mx-auto h-10 w-10 text-success" />
+              <div className="py-10 text-center" role="status">
+                <CheckCircle2 className="mx-auto h-10 w-10 text-success" aria-hidden="true" />
                 <h2 className="font-display mt-4 text-2xl font-medium text-foreground">
                   Inquiry Logged
                 </h2>
@@ -96,11 +97,7 @@ export function ContactPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 <h2 className="font-display text-2xl font-medium text-foreground">Send an Inquiry</h2>
-                {error && (
-                  <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive">
-                    {error}
-                  </p>
-                )}
+                {error && <FormAlert>{error}</FormAlert>}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -110,9 +107,14 @@ export function ContactPage() {
                     <input
                       id="c-name"
                       type="text"
+                      autoComplete="name"
+                      required
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Adaeze Okafor"
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      placeholder="Your full name"
                       className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -123,8 +125,13 @@ export function ContactPage() {
                     <input
                       id="c-email"
                       type="email"
+                      autoComplete="email"
+                      required
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) setError(null);
+                      }}
                       placeholder="name@company.ng"
                       className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
@@ -155,8 +162,12 @@ export function ContactPage() {
                   <textarea
                     id="c-msg"
                     rows={5}
+                    required
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) => {
+                      setMessage(e.target.value);
+                      if (error) setError(null);
+                    }}
                     placeholder="Share your investment horizon, corporate treasury needs, or support question..."
                     className="mt-1.5 w-full rounded-lg border border-input bg-background p-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
@@ -164,7 +175,7 @@ export function ContactPage() {
 
                 <button
                   type="submit"
-                  className="inline-flex h-11 items-center rounded-lg bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 sm:w-auto"
                 >
                   Submit Message
                 </button>

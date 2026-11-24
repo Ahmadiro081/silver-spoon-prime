@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
+import { TestEnvironmentBanner } from "@/components/common/TestEnvironmentBanner";
 import { APP_CONFIG } from "@/config/app";
 import { useAppState } from "@/context/AppStateContext";
 
@@ -20,6 +21,10 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const { authenticatedUser } = useAppState();
 
   useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMobileOpen(false);
@@ -34,6 +39,10 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
       {/* Strict 3-Zone Top Bar Contract */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 lg:px-8">
@@ -48,6 +57,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.to}
                   to={item.to}
+                  aria-current={active ? "page" : undefined}
                   className={`relative py-1 text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${
                     active
                       ? "text-foreground after:absolute after:inset-x-0 after:-bottom-[19px] after:h-[2px] after:bg-primary"
@@ -93,27 +103,45 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setMobileOpen((prev) => !prev)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-foreground"
+              aria-expanded={mobileOpen}
+              aria-controls="public-mobile-nav"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-foreground transition-colors hover:bg-secondary"
               aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileOpen ? (
+                <X className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Menu className="h-5 w-5" aria-hidden="true" />
+              )}
             </button>
           </div>
         </div>
 
         {mobileOpen && (
-          <div className="border-t border-border bg-card lg:hidden">
+          <nav
+            id="public-mobile-nav"
+            aria-label="Mobile navigation"
+            className="border-t border-border bg-card lg:hidden"
+          >
             <div className="mx-auto max-w-7xl space-y-1 px-4 py-4">
-              {NAV_LINKS.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-secondary"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {NAV_LINKS.map((item) => {
+                const active = pathname === item.to;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
+                    className={`block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3">
                 {authenticatedUser ? (
                   <Link
@@ -128,14 +156,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                     <Link
                       to="/login"
                       onClick={() => setMobileOpen(false)}
-                      className="inline-flex h-11 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground"
+                      className="inline-flex h-11 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground hover:bg-secondary"
                     >
                       Sign In
                     </Link>
                     <Link
                       to="/register"
                       onClick={() => setMobileOpen(false)}
-                      className="inline-flex h-11 items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground"
+                      className="inline-flex h-11 items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
                     >
                       Open Account
                     </Link>
@@ -143,11 +171,15 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
-          </div>
+          </nav>
         )}
       </header>
 
-      <main className="flex-1">{children}</main>
+      <TestEnvironmentBanner variant="public" />
+
+      <main id="main-content" tabIndex={-1} className="flex-1">
+        {children}
+      </main>
 
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -162,25 +194,25 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold tracking-wide text-foreground">Platform</h4>
+              <h2 className="text-xs font-semibold tracking-wide text-foreground">Platform</h2>
               <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
                 <li>
-                  <Link to="/plans" className="hover:text-foreground">
+                  <Link to="/plans" className="transition-colors hover:text-foreground">
                     Investment Plans
                   </Link>
                 </li>
                 <li>
-                  <Link to="/how-it-works" className="hover:text-foreground">
+                  <Link to="/how-it-works" className="transition-colors hover:text-foreground">
                     How It Works
                   </Link>
                 </li>
                 <li>
-                  <Link to="/dashboard" className="hover:text-foreground">
+                  <Link to="/dashboard" className="transition-colors hover:text-foreground">
                     Client Dashboard
                   </Link>
                 </li>
                 <li>
-                  <Link to="/admin" className="hover:text-foreground">
+                  <Link to="/admin" className="transition-colors hover:text-foreground">
                     Admin Console
                   </Link>
                 </li>
@@ -188,20 +220,20 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold tracking-wide text-foreground">Company</h4>
+              <h2 className="text-xs font-semibold tracking-wide text-foreground">Company</h2>
               <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
                 <li>
-                  <Link to="/about" className="hover:text-foreground">
+                  <Link to="/about" className="transition-colors hover:text-foreground">
                     About Us
                   </Link>
                 </li>
                 <li>
-                  <Link to="/faq" className="hover:text-foreground">
+                  <Link to="/faq" className="transition-colors hover:text-foreground">
                     FAQ
                   </Link>
                 </li>
                 <li>
-                  <Link to="/contact" className="hover:text-foreground">
+                  <Link to="/contact" className="transition-colors hover:text-foreground">
                     Contact Desk
                   </Link>
                 </li>
@@ -209,20 +241,20 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold tracking-wide text-foreground">Governance</h4>
+              <h2 className="text-xs font-semibold tracking-wide text-foreground">Governance</h2>
               <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
                 <li>
-                  <Link to="/terms" className="hover:text-foreground">
+                  <Link to="/terms" className="transition-colors hover:text-foreground">
                     Terms & Conditions
                   </Link>
                 </li>
                 <li>
-                  <Link to="/privacy" className="hover:text-foreground">
+                  <Link to="/privacy" className="transition-colors hover:text-foreground">
                     Privacy Policy
                   </Link>
                 </li>
                 <li>
-                  <Link to="/login" className="hover:text-foreground">
+                  <Link to="/login" className="transition-colors hover:text-foreground">
                     Client Sign In
                   </Link>
                 </li>

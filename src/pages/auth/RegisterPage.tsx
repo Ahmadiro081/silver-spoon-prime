@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AuthLayout } from "@/layouts/AuthLayout";
+import { FormAlert, PasswordInput } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 
 export function RegisterPage() {
@@ -46,14 +47,7 @@ export function RegisterPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {error && (
-          <div
-            role="alert"
-            className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive"
-          >
-            {error}
-          </div>
-        )}
+        {error && <FormAlert>{error}</FormAlert>}
 
         <div>
           <label htmlFor="reg-name" className="block text-xs font-medium text-foreground">
@@ -62,9 +56,13 @@ export function RegisterPage() {
           <input
             id="reg-name"
             type="text"
+            autoComplete="name"
             value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Chinedu Okeke"
+            onChange={(e) => {
+              setFullName(e.target.value);
+              if (error) setError(null);
+            }}
+            placeholder="Full legal name"
             required
             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
@@ -78,8 +76,12 @@ export function RegisterPage() {
             <input
               id="reg-email"
               type="email"
+              autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(null);
+              }}
               placeholder="name@domain.ng"
               required
               className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -92,8 +94,12 @@ export function RegisterPage() {
             <input
               id="reg-phone"
               type="tel"
+              autoComplete="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (error) setError(null);
+              }}
               placeholder="+234 803 000 0000"
               className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -105,13 +111,16 @@ export function RegisterPage() {
             <label htmlFor="reg-pass" className="block text-xs font-medium text-foreground">
               Password (min. 8 chars)
             </label>
-            <input
+            <PasswordInput
               id="reg-pass"
-              type="password"
+              autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError(null);
+              }}
               required
-              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="bg-card"
             />
           </div>
           <div>
@@ -123,7 +132,7 @@ export function RegisterPage() {
               type="text"
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value)}
-              placeholder="SS-ADAEZE24"
+              placeholder="SS-XXXXXX"
               className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>

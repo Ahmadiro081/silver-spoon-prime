@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { Receipt, Search } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
 import { Modal } from "@/components/common/Modal";
 import {
+  FormAlert,
   MetricCard,
+  SearchInput,
   SegmentedFilter,
   StatusText,
   TableEmptyRow,
@@ -25,6 +27,8 @@ export function AdminWithdrawalsPage() {
   const [query, setQuery] = useState("");
   const [reviewDraft, setReviewDraft] = useState<WithdrawalReviewDraft | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [receiptTxn, setReceiptTxn] = useState<TransactionRecord | null>(null);
 
   const withdrawals = transactions.filter((t) => t.type === "Withdrawal");
@@ -48,6 +52,7 @@ export function AdminWithdrawalsPage() {
     .reduce((s, w) => s + w.amount, 0);
 
   const openReviewModal = (txn: TransactionRecord, decision: "Completed" | "Declined") => {
+    setReviewError(null);
     setReviewDraft({ txn, decision });
     setReviewNote(
       decision === "Completed"
@@ -58,31 +63,38 @@ export function AdminWithdrawalsPage() {
 
   const handleConfirmReview = (e: FormEvent) => {
     e.preventDefault();
-    if (!reviewDraft) return;
+    if (!reviewDraft || submitting) return;
     if (reviewDraft.decision === "Declined" && !reviewNote.trim()) {
-      toast.error("Please provide a rejection note explaining why the withdrawal was declined.");
+      setReviewError("Please provide a rejection note explaining why the withdrawal was declined.");
       return;
     }
 
-    const res = adminReviewTransaction(
-      reviewDraft.txn.id,
-      reviewDraft.decision,
-      reviewNote.trim() ||
-        (reviewDraft.decision === "Completed"
-          ? "Simulated NIP payout disbursed by treasury."
-          : "Declined by compliance desk."),
-    );
-    if (!res.ok) {
-      toast.error(res.error ?? "Unable to process withdrawal review.");
-      return;
+    setReviewError(null);
+    setSubmitting(true);
+    try {
+      const res = adminReviewTransaction(
+        reviewDraft.txn.id,
+        reviewDraft.decision,
+        reviewNote.trim() ||
+          (reviewDraft.decision === "Completed"
+            ? "Simulated NIP payout disbursed by treasury."
+            : "Declined by compliance desk."),
+      );
+      if (!res.ok) {
+        setReviewError(res.error ?? "Unable to process withdrawal review.");
+        return;
+      }
+      toast.success(
+        reviewDraft.decision === "Completed"
+          ? `Withdrawal ${reviewDraft.txn.reference} approved and settled.`
+          : `Withdrawal ${reviewDraft.txn.reference} declined; held funds restored to client available balance.`,
+      );
+      setReviewDraft(null);
+      setReviewNote("");
+      setReviewError(null);
+    } finally {
+      setSubmitting(false);
     }
-    toast.success(
-      reviewDraft.decision === "Completed"
-        ? `Withdrawal ${reviewDraft.txn.reference} approved and settled.`
-        : `Withdrawal ${reviewDraft.txn.reference} declined; held funds restored to client available balance.`,
-    );
-    setReviewDraft(null);
-    setReviewNote("");
   };
 
   return (
@@ -95,17 +107,15 @@ export function AdminWithdrawalsPage() {
         </section>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search reference, investor, or bank..."
-              className="h-10 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search reference, investor, or bank..."
+            ariaLabel="Search withdrawals by reference, investor, or bank"
+            className="w-full max-w-sm"
+          />
           <SegmentedFilter
+            ariaLabel="Filter withdrawals by status"
             value={filter}
             onChange={setFilter}
             options={[
@@ -117,18 +127,36 @@ export function AdminWithdrawalsPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite" className="font-tabular">
+            Showing {filtered.length} of {withdrawals.length} withdrawal requests
+          </p>
+          {(query.trim() || filter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setFilter("ALL");
+              }}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Reference</th>
-                  <th className="px-6 py-3 font-medium">Client</th>
-                  <th className="px-6 py-3 font-medium">Destination Bank</th>
-                  <th className="px-6 py-3 font-medium">Requested</th>
-                  <th className="px-6 py-3 text-right font-medium">Amount</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Payout Action</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Reference</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Client</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Destination Bank</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Requested</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Payout Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -137,6 +165,20 @@ export function AdminWithdrawalsPage() {
                     colSpan={7}
                     title="No withdrawal records found"
                     description="Adjust the status filter or search query to inspect payout requests."
+                    action={
+                      (query.trim() || filter !== "ALL") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuery("");
+                            setFilter("ALL");
+                          }}
+                          className="h-9 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Clear Filters
+                        </button>
+                      ) : undefined
+                    }
                   />
                 ) : (
                   filtered.map((txn) => (
@@ -171,6 +213,7 @@ export function AdminWithdrawalsPage() {
                             <button
                               type="button"
                               onClick={() => openReviewModal(txn, "Completed")}
+                              aria-label={`Approve payout ${txn.reference}`}
                               className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                             >
                               Approve Payout
@@ -178,6 +221,7 @@ export function AdminWithdrawalsPage() {
                             <button
                               type="button"
                               onClick={() => openReviewModal(txn, "Declined")}
+                              aria-label={`Decline withdrawal ${txn.reference}`}
                               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
                             >
                               Decline
@@ -187,9 +231,10 @@ export function AdminWithdrawalsPage() {
                           <button
                             type="button"
                             onClick={() => setReceiptTxn(txn)}
+                            aria-label={`View receipt for ${txn.reference}`}
                             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
                           >
-                            <Receipt className="h-3.5 w-3.5" />
+                            <Receipt className="h-3.5 w-3.5" aria-hidden="true" />
                             Receipt
                           </button>
                         )}
@@ -206,7 +251,10 @@ export function AdminWithdrawalsPage() {
       {/* Withdrawal Payout Confirmation Modal */}
       <Modal
         open={Boolean(reviewDraft)}
-        onClose={() => setReviewDraft(null)}
+        onClose={() => {
+          setReviewDraft(null);
+          setReviewError(null);
+        }}
         title={
           reviewDraft?.decision === "Completed"
             ? "Approve Simulated NIP Disbursement"
@@ -216,7 +264,9 @@ export function AdminWithdrawalsPage() {
         maxWidthClass="max-w-md"
       >
         {reviewDraft && (
-          <form onSubmit={handleConfirmReview} className="space-y-4">
+          <form onSubmit={handleConfirmReview} noValidate className="space-y-4">
+            {reviewError && <FormAlert>{reviewError}</FormAlert>}
+
             <div className="rounded-xl border border-border bg-secondary/35 p-4 text-xs">
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Investor</span>
@@ -260,7 +310,10 @@ export function AdminWithdrawalsPage() {
                 rows={3}
                 required={reviewDraft.decision === "Declined"}
                 value={reviewNote}
-                onChange={(e) => setReviewNote(e.target.value)}
+                onChange={(e) => {
+                  setReviewNote(e.target.value);
+                  if (reviewError) setReviewError(null);
+                }}
                 placeholder={
                   reviewDraft.decision === "Declined"
                     ? "e.g. Account name mismatch with KYC profile..."
@@ -273,20 +326,29 @@ export function AdminWithdrawalsPage() {
             <div className="flex justify-end gap-2 border-t border-border pt-4">
               <button
                 type="button"
-                onClick={() => setReviewDraft(null)}
-                className="h-9 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                disabled={submitting}
+                onClick={() => {
+                  setReviewDraft(null);
+                  setReviewError(null);
+                }}
+                className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className={`h-9 rounded-lg px-5 text-xs font-medium ${
+                disabled={submitting}
+                className={`h-10 rounded-lg px-5 text-xs font-medium disabled:opacity-50 ${
                   reviewDraft.decision === "Declined"
                     ? "bg-destructive text-white hover:bg-destructive/90"
                     : "bg-primary text-primary-foreground hover:bg-primary/90"
                 }`}
               >
-                {reviewDraft.decision === "Completed" ? "Approve & Disburse" : "Decline & Refund Hold"}
+                {submitting
+                  ? "Processing..."
+                  : reviewDraft.decision === "Completed"
+                    ? "Approve & Disburse"
+                    : "Decline & Refund Hold"}
               </button>
             </div>
           </form>

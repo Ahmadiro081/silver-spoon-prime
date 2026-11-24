@@ -1,23 +1,25 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { AdminDashboardLayout } from "@/layouts/AdminDashboardLayout";
 import { Modal } from "@/components/common/Modal";
 import {
   MetricCard,
+  SearchInput,
   SegmentedFilter,
   StatusText,
   TableEmptyRow,
 } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
+import { evaluateAutoCompoundRollover } from "@/services/platformService";
 import type { InvestmentRecord, InvestmentStatus } from "@/types/domain";
 import { formatDate, formatNaira } from "@/utils/format";
 
 export function AdminInvestmentsPage() {
-  const { investments, adminMatureInvestment } = useAppState();
+  const { investments, plans, users, adminMatureInvestment } = useAppState();
   const [filter, setFilter] = useState<"ALL" | InvestmentStatus>("ALL");
   const [query, setQuery] = useState("");
   const [maturingInv, setMaturingInv] = useState<InvestmentRecord | null>(null);
+  const [settling, setSettling] = useState(false);
 
   const filtered = investments.filter((i) => {
     const matchesStatus = filter === "ALL" || i.status === filter;
@@ -37,17 +39,41 @@ export function AdminInvestmentsPage() {
     .filter((i) => i.status === "Matured")
     .reduce((s, i) => s + i.principal, 0);
 
+  const maturingPreview = maturingInv
+    ? evaluateAutoCompoundRollover(
+        maturingInv,
+        plans.find((p) => p.id === maturingInv.planId),
+        users.find((u) => u.id === maturingInv.userId),
+        maturingInv.projectedReturn,
+      )
+    : null;
+
   const confirmMature = () => {
-    if (!maturingInv) return;
-    const res = adminMatureInvestment(maturingInv.id);
-    if (!res.ok) {
-      toast.error(res.error ?? "Unable to settle investment.");
-      return;
+    if (!maturingInv || settling) return;
+    setSettling(true);
+    try {
+      const res = adminMatureInvestment(maturingInv.id);
+      if (!res.ok) {
+        toast.error(res.error ?? "Unable to settle investment.");
+        return;
+      }
+      if (res.data?.rolledOverInvestmentId) {
+        toast.success(
+          `Settled ${maturingInv.id} (+${formatNaira(res.data.realizedReturn)}) and auto-compounded ${formatNaira(res.data.rolloverPrincipal ?? 0)} into ${res.data.rolledOverInvestmentId}.`,
+        );
+      } else if (maturingInv.autoCompound && res.data?.rolloverSkippedReason) {
+        toast.success(
+          `Settled ${maturingInv.id} (+${formatNaira(res.data.realizedReturn)}) to Available Balance. Auto-compound skipped: ${res.data.rolloverSkippedReason}`,
+        );
+      } else {
+        toast.success(
+          `Settled ${maturingInv.planName} (${maturingInv.id}). Realized return of ${formatNaira(res.data?.realizedReturn ?? 0)} credited.`,
+        );
+      }
+      setMaturingInv(null);
+    } finally {
+      setSettling(false);
     }
-    toast.success(
-      `Settled ${maturingInv.planName} (${maturingInv.id}). Realized return of ${formatNaira(res.data?.realizedReturn ?? 0)} credited.`,
-    );
-    setMaturingInv(null);
   };
 
   return (
@@ -64,17 +90,15 @@ export function AdminInvestmentsPage() {
         </section>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search allocation ID, investor, or plan..."
-              className="h-10 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search allocation ID, investor, or plan..."
+            ariaLabel="Search allocations by ID, investor, or plan"
+            className="w-full max-w-sm"
+          />
           <SegmentedFilter
+            ariaLabel="Filter investment mandates by status"
             value={filter}
             onChange={setFilter}
             options={[
@@ -85,19 +109,37 @@ export function AdminInvestmentsPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite" className="font-tabular">
+            Showing {filtered.length} of {investments.length} investment mandates
+          </p>
+          {(query.trim() || filter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setFilter("ALL");
+              }}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Allocation ID</th>
-                  <th className="px-6 py-3 font-medium">Investor</th>
-                  <th className="px-6 py-3 font-medium">Plan</th>
-                  <th className="px-6 py-3 text-right font-medium">Principal</th>
-                  <th className="px-6 py-3 text-right font-medium">Projected Return</th>
-                  <th className="px-6 py-3 font-medium">Maturity</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 text-right font-medium">Operation</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Allocation ID</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Investor</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Plan</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Principal</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Projected Return</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Maturity</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-6 py-3 text-right font-medium">Operation</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -106,6 +148,20 @@ export function AdminInvestmentsPage() {
                     colSpan={8}
                     title="No investment allocations match your filters"
                     description="Clear your search query or change the mandate status filter."
+                    action={
+                      (query.trim() || filter !== "ALL") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuery("");
+                            setFilter("ALL");
+                          }}
+                          className="h-9 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                        >
+                          Clear Filters
+                        </button>
+                      ) : undefined
+                    }
                   />
                 ) : (
                   filtered.map((inv) => (
@@ -114,7 +170,14 @@ export function AdminInvestmentsPage() {
                       <td className="px-6 py-3.5 font-medium text-foreground">{inv.userName}</td>
                       <td className="px-6 py-3.5 text-xs text-muted-foreground">
                         <p className="font-medium text-foreground">{inv.planName}</p>
-                        <p>{inv.targetReturnPercent}% · {inv.riskBand} risk</p>
+                        <p>
+                          {inv.targetReturnPercent}% · {inv.riskBand} risk ·{" "}
+                          {inv.rolledOverToInvestmentId
+                            ? `Rolled → ${inv.rolledOverToInvestmentId}`
+                            : inv.autoCompound
+                              ? "Auto-Compound On"
+                              : "Settle to Cash"}
+                        </p>
                       </td>
                       <td className="font-tabular px-6 py-3.5 text-right font-semibold text-foreground whitespace-nowrap">
                         {formatNaira(inv.principal)}
@@ -133,12 +196,15 @@ export function AdminInvestmentsPage() {
                           <button
                             type="button"
                             onClick={() => setMaturingInv(inv)}
+                            aria-label={`Settle maturity for ${inv.id} (${inv.userName})`}
                             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                           >
                             Settle Maturity
                           </button>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Settled</span>
+                          <span className="text-xs text-muted-foreground">
+                            {inv.rolledOverToInvestmentId ? "Rolled Over" : "Settled"}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -181,27 +247,54 @@ export function AdminInvestmentsPage() {
                   +{formatNaira(maturingInv.projectedReturn)}
                 </span>
               </div>
+              <div className="mt-2 flex justify-between gap-2">
+                <span className="text-muted-foreground">Auto-Compound Preference</span>
+                <span className="font-medium text-foreground">
+                  {maturingInv.autoCompound ? "Enabled" : "Disabled"}
+                </span>
+              </div>
             </div>
 
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Settling this mandate releases the principal back into the investor&apos;s Available
-              Balance, logs a completed Realized Return ledger entry, and notifies the client.
-            </p>
+            {maturingInv.autoCompound && maturingPreview?.eligible ? (
+              <div className="rounded-lg border border-border bg-secondary/30 px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
+                <span className="font-semibold">Automatic Rollover Preview:</span> Principal +
+                realized return (
+                <span className="font-tabular font-semibold">
+                  {formatNaira(maturingPreview.rolloverPrincipal)}
+                </span>
+                ) will automatically roll over into a new active cycle of {maturingInv.planName},
+                keeping Available Balance unchanged and logging both the Realized Return and new
+                Investment entries.
+              </div>
+            ) : maturingInv.autoCompound && maturingPreview?.reason ? (
+              <div className="rounded-lg border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
+                <span className="font-semibold">Rollover Ineligible:</span>{" "}
+                {maturingPreview.reason} Full principal and realized return will credit to Available
+                Balance instead.
+              </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Settling this mandate releases the principal back into the investor&apos;s Available
+                Balance, logs a completed Realized Return ledger entry, and notifies the client.
+              </p>
+            )}
 
             <div className="flex justify-end gap-2 border-t border-border pt-4">
               <button
                 type="button"
+                disabled={settling}
                 onClick={() => setMaturingInv(null)}
-                className="h-9 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+                className="h-10 rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={settling}
                 onClick={confirmMature}
-                className="h-9 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                Confirm Settlement
+                {settling ? "Settling..." : "Confirm Settlement"}
               </button>
             </div>
           </div>

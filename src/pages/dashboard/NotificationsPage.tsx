@@ -9,6 +9,7 @@ export function NotificationsPage() {
   const { userNotifications, markNotificationRead, markAllNotificationsRead } = useAppState();
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
+  const unreadCount = userNotifications.filter((n) => !n.read).length;
   const items = userNotifications.filter((n) => (filter === "unread" ? !n.read : true));
 
   return (
@@ -19,20 +20,22 @@ export function NotificationsPage() {
         <button
           type="button"
           onClick={markAllNotificationsRead}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
+          disabled={unreadCount === 0}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <CheckCheck className="h-3.5 w-3.5" />
+          <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
           Mark All Read
         </button>
       }
     >
       <div className="space-y-5">
         <SegmentedFilter
+          ariaLabel="Filter notifications"
           value={filter}
           onChange={setFilter}
           options={[
             { label: `All (${userNotifications.length})`, value: "all" },
-            { label: `Unread (${userNotifications.filter((n) => !n.read).length})`, value: "unread" },
+            { label: `Unread (${unreadCount})`, value: "unread" },
           ]}
         />
 
@@ -40,6 +43,17 @@ export function NotificationsPage() {
           <EmptyState
             title="All caught up"
             description="No unread alerts or settlement notices at this time."
+            action={
+              filter === "unread" && userNotifications.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setFilter("all")}
+                  className="inline-flex h-9 items-center rounded-lg border border-border px-3.5 text-xs font-medium text-foreground hover:bg-secondary"
+                >
+                  Show All Notifications
+                </button>
+              ) : undefined
+            }
           />
         ) : (
           <div className="surface-card divide-y divide-border overflow-hidden">
@@ -51,7 +65,7 @@ export function NotificationsPage() {
                 }`}
               >
                 <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="capitalize">{item.category}</span>
                     <span aria-hidden="true">·</span>
                     <span className="font-tabular">{formatDateTime(item.createdAt)}</span>
@@ -69,6 +83,7 @@ export function NotificationsPage() {
                 {!item.read && (
                   <button
                     type="button"
+                    aria-label={`Mark "${item.title}" as read`}
                     onClick={() => markNotificationRead(item.id)}
                     className="shrink-0 text-xs font-medium text-foreground underline underline-offset-4 hover:text-primary"
                   >

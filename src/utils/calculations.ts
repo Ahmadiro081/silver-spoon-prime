@@ -154,7 +154,8 @@ export function buildUserPortfolioHistory(
     const invsUpToMonth = investments
       .filter((i) => new Date(i.startedAt).getTime() <= win.endTs)
       .map((i) => {
-        const maturedByEnd = new Date(i.maturesAt).getTime() <= win.endTs;
+        const effectiveMaturityTs = new Date(i.settledAt ?? i.maturesAt).getTime();
+        const maturedByEnd = i.status === "Matured" && effectiveMaturityTs <= win.endTs;
         return {
           ...i,
           status:
@@ -232,7 +233,8 @@ export function buildPlatformMonthlyMetrics(
               status:
                 i.status === "Cancelled"
                   ? ("Cancelled" as const)
-                  : new Date(i.maturesAt).getTime() <= win.endTs
+                  : i.status === "Matured" &&
+                      new Date(i.settledAt ?? i.maturesAt).getTime() <= win.endTs
                     ? ("Matured" as const)
                     : ("Active" as const),
             }));
@@ -252,15 +254,23 @@ export function buildPlatformMonthlyMetrics(
 
 /**
  * Generates an illustrative payout schedule for a single investment mandate.
+ *
+ * Financial consistency rule:
+ * - Interim schedule dates on Active mandates are NEVER marked "Settled" because
+ *   earnings are only credited to the wallet ledger upon actual maturity settlement.
+ * - Past schedule milestones on Active mandates display as "Pending Settlement";
+ *   future milestones display as "Scheduled".
+ * - Only Matured mandates mark schedule rows "Settled".
  */
 export function buildInvestmentPayoutSchedule(
   investment: InvestmentRecord,
   plan?: InvestmentPlan,
+  referenceDate: Date = new Date(),
 ): PayoutScheduleItem[] {
   const startMs = new Date(investment.startedAt).getTime();
   const endMs = new Date(investment.maturesAt).getTime();
   const frequency = plan?.payoutFrequency ?? "At Maturity";
-  const now = Date.now();
+  const now = referenceDate.getTime();
 
   let periods = 1;
   if (frequency === "Quarterly" && investment.durationDays >= 180) {
@@ -279,19 +289,115 @@ export function buildInvestmentPayoutSchedule(
     const projectedAmount = isFinal
       ? investment.projectedReturn - perPeriodReturn * (periods - 1)
       : perPeriodReturn;
-    const settled = investment.status === "Matured" || (!isFinal && schedMs <= now);
+
+    let status: PayoutScheduleItem["status"];
+    if (investment.status === "Cancelled") {
+      status = "Cancelled";
+    } else if (investment.status === "Matured") {
+      status = "Settled";
+    } else if (schedMs <= now) {
+      status = "Pending Settlement";
+    } else {
+      status = "Scheduled";
+    }
+
+    const finalLabel = investment.rolledOverToInvestmentId
+      ? `Maturity Settlement (Rolled Over → ${investment.rolledOverToInvestmentId})`
+      : "Maturity Settlement (Principal + Return)";
 
     items.push({
       installment: i,
-      label: isFinal
-        ? "Maturity Settlement (Principal + Return)"
-        : `${frequency} Distribution #${i}`,
+      label: isFinal ? finalLabel : `${frequency} Milestone #${i} (Accrual Checkpoint)`,
       scheduledDate: new Date(schedMs).toISOString(),
       projectedAmount,
       principalComponent: isFinal ? investment.principal : 0,
-      status: settled ? "Settled" : "Projected",
+      status,
     });
   }
 
   return items;
+}
+
+export interface TransactionLedgerImpact {
+  isInflow: boolean;
+  sign: "+" | "-" | "";
+  grossAmount: number;
+  fee: number;
+  netWalletImpact: number;
+  impactDescription: string;
+}
+
+/**
+ * Single source of truth for how a transaction affects an investor's Available Balance
+ * across overview, wallet history, transaction ledger, and receipts.
+ */
+export function getTransactionLedgerImpact(txn: TransactionRecord): TransactionLedgerImpact {
+  const isInflow =
+    txn.type === "Deposit" ||
+    txn.type === "Realized Return" ||
+    txn.type === "Referral Commission";
+
+  if (txn.status === "Declined") {
+    return {
+      isInflow,
+      sign: "",
+      grossAmount: txn.amount,
+      fee: txn.fee,
+      netWalletImpact: 0,
+      impactDescription: "No wallet balance impact (declined)",
+    };
+  }
+
+  if (txn.type === "Deposit" && txn.status === "Pending") {
+    return {
+      isInflow: true,
+      sign: "+",
+      grossAmount: txn.amount,
+      fee: txn.fee,
+      netWalletImpact: 0,
+      impactDescription: "Pending credit — reflected in Available Balance after confirmation",
+    };
+  }
+
+  if (txn.type === "Withdrawal" && txn.status === "Pending") {
+    return {
+      isInflow: false,
+      sign: "-",
+      grossAmount: txn.amount,
+      fee: txn.fee,
+      netWalletImpact: -(txn.amount + txn.fee),
+      impactDescription: "Reserved from Available Balance pending treasury disbursement",
+    };
+  }
+
+  if (txn.type === "Investment") {
+    return {
+      isInflow: false,
+      sign: "-",
+      grossAmount: txn.amount,
+      fee: txn.fee,
+      netWalletImpact: -txn.amount,
+      impactDescription: "Reallocated from Available Balance into Active Investments",
+    };
+  }
+
+  if (isInflow) {
+    return {
+      isInflow: true,
+      sign: "+",
+      grossAmount: txn.amount,
+      fee: txn.fee,
+      netWalletImpact: txn.amount,
+      impactDescription: "Credited to Available Balance",
+    };
+  }
+
+  return {
+    isInflow: false,
+    sign: "-",
+    grossAmount: txn.amount,
+    fee: txn.fee,
+    netWalletImpact: -(txn.amount + txn.fee),
+    impactDescription: "Debited from Available Balance (principal + settlement fee)",
+  };
 }

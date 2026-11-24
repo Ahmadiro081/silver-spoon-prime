@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { PublicLayout } from "@/layouts/PublicLayout";
-import { SegmentedFilter } from "@/components/common/Primitives";
+import { EmptyState, SearchInput, SegmentedFilter } from "@/components/common/Primitives";
 import { FAQ_ITEMS } from "@/data/publicContent";
 import type { FaqItem } from "@/types/domain";
 
@@ -18,6 +18,8 @@ export function FaqPage() {
     return matchesCat && matchesQuery;
   });
 
+  const hasActiveFilter = category !== "ALL" || query.trim().length > 0;
+
   return (
     <PublicLayout>
       <section className="border-b border-border bg-card py-16">
@@ -32,17 +34,15 @@ export function FaqPage() {
           </p>
 
           <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative flex-1 max-w-md">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search questions..."
-                className="h-10 w-full rounded-lg border border-input bg-background pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search questions..."
+              ariaLabel="Search frequently asked questions"
+              className="w-full max-w-md flex-1"
+            />
             <SegmentedFilter
+              ariaLabel="Filter questions by category"
               value={category}
               onChange={setCategory}
               options={[
@@ -58,18 +58,39 @@ export function FaqPage() {
       </section>
 
       <section className="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="divide-y divide-border border-y border-border">
-          {filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              No questions matched your filter. Try clearing the search term.
-            </p>
-          ) : (
-            filtered.map((item) => {
+        <p aria-live="polite" className="mb-4 text-xs text-muted-foreground">
+          Showing {filtered.length} of {FAQ_ITEMS.length} documented answers
+          {hasActiveFilter ? " matching your filter." : "."}
+        </p>
+
+        {filtered.length === 0 ? (
+          <EmptyState
+            title="No matching questions"
+            description="No FAQ entries matched your current search term or category filter."
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("ALL");
+                }}
+                className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-xs font-medium text-foreground hover:bg-secondary"
+              >
+                Clear Search & Filters
+              </button>
+            }
+          />
+        ) : (
+          <div className="divide-y divide-border border-y border-border">
+            {filtered.map((item) => {
               const isOpen = openId === item.id;
+              const panelId = `faq-panel-${item.id}`;
               return (
                 <div key={item.id} className="py-5">
                   <button
                     type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
                     onClick={() => setOpenId(isOpen ? null : item.id)}
                     className="flex w-full items-start justify-between gap-4 text-left"
                   >
@@ -81,18 +102,22 @@ export function FaqPage() {
                       className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
                         isOpen ? "rotate-180" : ""
                       }`}
+                      aria-hidden="true"
                     />
                   </button>
                   {isOpen && (
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                    <p
+                      id={panelId}
+                      className="mt-3 text-sm leading-relaxed text-muted-foreground"
+                    >
                       {item.answer}
                     </p>
                   )}
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </section>
     </PublicLayout>
   );

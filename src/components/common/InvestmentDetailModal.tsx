@@ -26,6 +26,9 @@ export function InvestmentDetailModal({
   );
   const schedule = buildInvestmentPayoutSchedule(investment, plan);
   const isMatured = investment.status === "Matured";
+  const hasPendingInterimMilestone =
+    investment.status === "Active" &&
+    schedule.some((row) => row.status === "Pending Settlement");
 
   const downloadStatement = () => {
     const lines = [
@@ -39,6 +42,7 @@ export function InvestmentDetailModal({
       `Tenor:                  ${investment.durationDays} days`,
       `Start Date:             ${formatDate(investment.startedAt)}`,
       `Maturity Date:          ${formatDate(investment.maturesAt)}`,
+      ...(investment.settledAt ? [`Settled At:             ${formatDate(investment.settledAt)}`] : []),
       `Allocated Principal:    ${formatNaira(investment.principal, true)}`,
       `Target Rate (Est.):     ${investment.targetReturnPercent}% (non-guaranteed)`,
       `Illustrative Projected: ${formatNaira(investment.projectedReturn, true)}`,
@@ -46,6 +50,15 @@ export function InvestmentDetailModal({
         ? `Realized Earnings Paid: ${formatNaira(investment.accruedReturn, true)}`
         : `Estimated Accrued:      ${formatNaira(investment.accruedReturn, true)} (unrealized)`,
       `Auto-Compound Pref.:    ${investment.autoCompound ? "Enabled" : "Disabled"}`,
+      ...(investment.rolledOverFromInvestmentId
+        ? [`Rollover Origin:        ${investment.rolledOverFromInvestmentId} (Cycle #${investment.rolloverCycle ?? 2})`]
+        : []),
+      ...(investment.rolledOverToInvestmentId
+        ? [`Rolled Over Into:       ${investment.rolledOverToInvestmentId}`]
+        : []),
+      ...(investment.rolloverSkippedReason
+        ? [`Rollover Note:          ${investment.rolloverSkippedReason}`]
+        : []),
       "",
       "PAYOUT SCHEDULE",
       ...schedule.map(
@@ -108,10 +121,46 @@ export function InvestmentDetailModal({
                 : formatNaira(investment.accruedReturn)}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {isMatured ? "Settled to wallet ledger" : "Not yet realized or withdrawable"}
+              {isMatured
+                ? investment.rolledOverToInvestmentId
+                  ? `Compounded into ${investment.rolledOverToInvestmentId}`
+                  : "Settled to wallet ledger"
+                : "Not yet realized or withdrawable"}
             </p>
           </div>
         </div>
+
+        {/* Rollover Lineage Banner */}
+        {(investment.rolledOverFromInvestmentId ||
+          investment.rolledOverToInvestmentId ||
+          investment.rolloverSkippedReason) && (
+          <div className="rounded-xl border border-border bg-secondary/35 px-4 py-3 text-xs">
+            <p className="font-semibold text-foreground">Auto-Compound Rollover Activity</p>
+            {investment.rolledOverFromInvestmentId && (
+              <p className="mt-1 text-muted-foreground">
+                Cycle #{investment.rolloverCycle ?? 2} automatically compounded from matured mandate{" "}
+                <span className="font-tabular font-medium text-foreground">
+                  {investment.rolledOverFromInvestmentId}
+                </span>
+                .
+              </p>
+            )}
+            {investment.rolledOverToInvestmentId && (
+              <p className="mt-1 text-muted-foreground">
+                Principal and realized return were automatically rolled over into active mandate{" "}
+                <span className="font-tabular font-medium text-foreground">
+                  {investment.rolledOverToInvestmentId}
+                </span>{" "}
+                upon maturity settlement.
+              </p>
+            )}
+            {investment.rolloverSkippedReason && !investment.rolledOverToInvestmentId && (
+              <p className="mt-1 text-muted-foreground">
+                Auto-compound skipped at maturity: {investment.rolloverSkippedReason}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Cycle Progress & Key Metadata */}
         <div className="rounded-xl border border-border p-4">
@@ -130,11 +179,18 @@ export function InvestmentDetailModal({
             <span className="font-tabular text-muted-foreground">
               {investment.status === "Active"
                 ? `${progress}% elapsed · ${daysRemaining(investment.maturesAt)} days to maturity`
-                : `Matured on ${formatDate(investment.maturesAt)}`}
+                : `Matured on ${formatDate(investment.settledAt ?? investment.maturesAt)}`}
             </span>
           </div>
 
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
+          <div
+            role="progressbar"
+            aria-label={`${investment.planName} cycle progress`}
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary"
+          >
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
           </div>
 
@@ -169,7 +225,7 @@ export function InvestmentDetailModal({
               </p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {investment.status === "Active"
-                  ? "Automatically roll principal and realized earnings into a new cycle upon maturity."
+                  ? "When matured in the Admin Console, principal + realized return automatically roll into a new cycle if the plan stays Active and within allocation limits."
                   : "Preference is locked because this mandate has already settled."}
               </p>
             </div>
@@ -205,11 +261,11 @@ export function InvestmentDetailModal({
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-secondary/40 text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Event</th>
-                  <th className="px-4 py-2.5 font-medium">Scheduled Date</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Principal</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Est. Return*</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Status</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">Event</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">Scheduled Date</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Principal</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Est. Return*</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -226,13 +282,20 @@ export function InvestmentDetailModal({
                       +{formatNaira(row.projectedAmount)}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <StatusText status={row.status === "Settled" ? "Completed" : "Pending"} />
+                      <StatusText status={row.status} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {hasPendingInterimMilestone && (
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              Note: Past milestone dates on active mandates show as{" "}
+              <span className="font-medium text-foreground">Pending Settlement</span> because
+              realized returns credit to your wallet ledger only upon actual maturity settlement.
+            </p>
+          )}
         </div>
 
         <RiskDisclosure
@@ -247,15 +310,15 @@ export function InvestmentDetailModal({
           <button
             type="button"
             onClick={downloadStatement}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-medium text-foreground whitespace-nowrap transition-colors hover:bg-secondary"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Download Statement
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Close Statement
           </button>

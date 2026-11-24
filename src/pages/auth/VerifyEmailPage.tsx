@@ -1,25 +1,34 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, MailCheck } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { CheckCircle2, Lock, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/layouts/AuthLayout";
+import { FormAlert } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 
 export function VerifyEmailPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { authenticatedUser, verifyEmail } = useAppState();
+  const {
+    authenticatedUser,
+    pendingVerificationCode,
+    requestVerificationCode,
+    verifyEmail,
+  } = useAppState();
 
-  const [email, setEmail] = useState(
-    searchParams.get("email") ?? authenticatedUser?.email ?? "",
-  );
-  const [code, setCode] = useState("482910");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
 
+  const accountEmail = authenticatedUser?.email ?? "";
+  const isAlreadyVerified = Boolean(authenticatedUser?.emailVerified) || verified;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const res = verifyEmail(email, code);
+    if (!authenticatedUser) {
+      setError("Sign in to your account before verifying your email address.");
+      return;
+    }
+    const res = verifyEmail(authenticatedUser.email, code);
     if (!res.ok) {
       setError(res.error ?? "Verification failed.");
       return;
@@ -29,11 +38,17 @@ export function VerifyEmailPage() {
     toast.success("Email address verified in simulation mode.");
   };
 
-  const handleResend = () => {
-    const freshCode = String(Math.floor(100000 + Math.random() * 899999));
-    setCode(freshCode);
-    toast.info(`Simulated verification code dispatched: ${freshCode}`);
+  const handleIssueCode = () => {
+    setError(null);
+    const res = requestVerificationCode();
+    if (!res.ok || !res.data) {
+      setError(res.error ?? "Unable to issue a verification code.");
+      return;
+    }
+    toast.info(`Simulated verification code issued: ${res.data.code}`);
   };
+
+  const workspacePath = authenticatedUser?.role === "admin" ? "/admin" : "/dashboard";
 
   return (
     <AuthLayout
@@ -45,64 +60,77 @@ export function VerifyEmailPage() {
         </Link>
       }
     >
-      {verified ? (
+      {!authenticatedUser ? (
         <div className="surface-card space-y-4 p-6 text-center">
-          <CheckCircle2 className="mx-auto h-9 w-9 text-success" />
+          <Lock className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Sign-In Required</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Email verification can only be completed for your active signed-in SILVER SPOON
+              account. Sign in first to request and confirm a verification code.
+            </p>
+          </div>
+          <Link
+            to="/login"
+            state={{ from: "/verify-email" }}
+            className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Sign In to Continue
+          </Link>
+        </div>
+      ) : isAlreadyVerified ? (
+        <div className="surface-card space-y-4 p-6 text-center" role="status">
+          <CheckCircle2 className="mx-auto h-9 w-9 text-success" aria-hidden="true" />
           <div>
             <p className="text-sm font-semibold text-foreground">Email Verified</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{email}</span> is now verified on your
-              SILVER SPOON profile.
+              <span className="font-medium text-foreground">{accountEmail}</span> is verified on
+              your SILVER SPOON profile.
             </p>
           </div>
           <button
             type="button"
-            onClick={() =>
-              navigate(
-                authenticatedUser
-                  ? authenticatedUser.role === "admin"
-                    ? "/admin"
-                    : "/dashboard"
-                  : "/login",
-              )
-            }
+            onClick={() => navigate(workspacePath)}
             className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
-            {authenticatedUser ? "Continue to Workspace" : "Proceed to Sign In"}
+            Continue to Workspace
           </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive"
-            >
-              {error}
-            </div>
-          )}
+          {error && <FormAlert>{error}</FormAlert>}
 
           <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/40 p-3.5 text-xs text-muted-foreground">
             <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-foreground" aria-hidden="true" />
-            <span>
-              Simulated verification environment: enter any 6-digit code (default code{" "}
-              <span className="font-tabular font-semibold text-foreground">{code}</span>) to confirm
-              your email address.
-            </span>
+            {pendingVerificationCode ? (
+              <span>
+                Simulated verification code issued for{" "}
+                <span className="font-medium text-foreground">{accountEmail}</span>:{" "}
+                <span className="font-tabular font-semibold text-foreground">
+                  {pendingVerificationCode}
+                </span>
+                . Enter this exact 6-digit code below to complete verification.
+              </span>
+            ) : (
+              <span>
+                No verification code is currently active for your account. Click{" "}
+                <span className="font-medium text-foreground">Issue verification code</span> to
+                generate a 6-digit simulated code.
+              </span>
+            )}
           </div>
 
           <div>
             <label htmlFor="ver-email" className="block text-xs font-medium text-foreground">
-              Account Email
+              Signed-In Account Email
             </label>
             <input
               id="ver-email"
               type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@domain.ng"
-              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              readOnly
+              disabled
+              value={accountEmail}
+              className="mt-1.5 h-10 w-full rounded-lg border border-input bg-secondary/50 px-3.5 text-sm text-muted-foreground"
             />
           </div>
 
@@ -113,21 +141,25 @@ export function VerifyEmailPage() {
               </label>
               <button
                 type="button"
-                onClick={handleResend}
+                onClick={handleIssueCode}
                 className="text-xs font-medium text-muted-foreground hover:text-foreground"
               >
-                Resend code
+                {pendingVerificationCode ? "Resend code" : "Issue verification code"}
               </button>
             </div>
             <input
               id="ver-code"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               required
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              placeholder="482910"
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, ""));
+                if (error) setError(null);
+              }}
+              placeholder="Enter 6-digit code"
               className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -139,15 +171,13 @@ export function VerifyEmailPage() {
             Verify Email Address
           </button>
 
-          {authenticatedUser && (
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
-            >
-              Skip for now & open Client Dashboard
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => navigate(workspacePath)}
+            className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            Skip for now & open Workspace
+          </button>
         </form>
       )}
     </AuthLayout>

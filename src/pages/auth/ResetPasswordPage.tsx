@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/layouts/AuthLayout";
+import { FormAlert, PasswordInput } from "@/components/common/Primitives";
 import { useAppState } from "@/context/AppStateContext";
 
 export function ResetPasswordPage() {
@@ -44,8 +45,8 @@ export function ResetPasswordPage() {
       }
     >
       {completed ? (
-        <div className="surface-card space-y-4 p-6 text-center">
-          <CheckCircle2 className="mx-auto h-9 w-9 text-success" />
+        <div className="surface-card space-y-4 p-6 text-center" role="status">
+          <CheckCircle2 className="mx-auto h-9 w-9 text-success" aria-hidden="true" />
           <div>
             <p className="text-sm font-semibold text-foreground">Password Updated</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -63,14 +64,7 @@ export function ResetPasswordPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-xs text-destructive"
-            >
-              {error}
-            </div>
-          )}
+          {error && <FormAlert>{error}</FormAlert>}
 
           <div>
             <label htmlFor="rp-email" className="block text-xs font-medium text-foreground">
@@ -79,10 +73,14 @@ export function ResetPasswordPage() {
             <input
               id="rp-email"
               type="email"
+              autoComplete="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="adaeze.okafor@silverspoon.ng"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(null);
+              }}
+              placeholder="name@domain.ng"
               className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -94,9 +92,13 @@ export function ResetPasswordPage() {
             <input
               id="rp-token"
               type="text"
+              autoComplete="one-time-code"
               required
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => {
+                setToken(e.target.value);
+                if (error) setError(null);
+              }}
               placeholder="SS-123456"
               className="font-tabular mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -107,26 +109,32 @@ export function ResetPasswordPage() {
               <label htmlFor="rp-pass" className="block text-xs font-medium text-foreground">
                 New Password
               </label>
-              <input
+              <PasswordInput
                 id="rp-pass"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  if (error) setError(null);
+                }}
+                className="bg-card"
               />
             </div>
             <div>
               <label htmlFor="rp-confirm" className="block text-xs font-medium text-foreground">
                 Confirm Password
               </label>
-              <input
+              <PasswordInput
                 id="rp-confirm"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (error) setError(null);
+                }}
+                className="bg-card"
               />
             </div>
           </div>
