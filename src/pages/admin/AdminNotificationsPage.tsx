@@ -14,11 +14,13 @@ export function AdminNotificationsPage() {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const investors = users.filter((u) => u.role === "investor");
 
-  const handleSend = (e: FormEvent) => {
+  const handleSend = async (e: FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     if (!title.trim()) {
       setFormError("Please enter a notification headline.");
       return;
@@ -29,19 +31,26 @@ export function AdminNotificationsPage() {
     }
 
     setFormError(null);
-    const res = adminSendNotification({
-      userId: recipient,
-      title: title.trim(),
-      message: message.trim(),
-      category,
-    });
-    if (!res.ok) {
-      setFormError(res.error ?? "Unable to send notification.");
-      return;
+    setSending(true);
+    try {
+      const res = await adminSendNotification({
+        userId: recipient,
+        title: title.trim(),
+        message: message.trim(),
+        category,
+      });
+      if (!res.ok) {
+        setFormError(res.error ?? "Unable to send notification.");
+        return;
+      }
+      toast.success("Notification dispatched and logged.");
+      setTitle("");
+      setMessage("");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Unable to send notification.");
+    } finally {
+      setSending(false);
     }
-    toast.success("Notification dispatched and logged.");
-    setTitle("");
-    setMessage("");
   };
 
   return (
@@ -132,10 +141,11 @@ export function AdminNotificationsPage() {
 
           <button
             type="submit"
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={sending}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            Send Notification
+            {sending ? "Sending..." : "Send Notification"}
           </button>
         </form>
 

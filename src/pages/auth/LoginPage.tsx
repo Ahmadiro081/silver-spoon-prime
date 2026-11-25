@@ -12,6 +12,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const fromPath = (location.state as { from?: string } | null)?.from;
 
@@ -23,16 +24,24 @@ export function LoginPage() {
     return role === "admin" ? "/admin" : "/dashboard";
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const res = login(email, password);
-    if (!res.ok || !res.data) {
-      setError(res.error ?? "Invalid email or password.");
-      return;
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await login(email, password);
+      if (!res.ok || !res.data) {
+        setError(res.error ?? "Invalid email or password.");
+        return;
+      }
+      setError(null);
+      toast.success(`Welcome back, ${res.data.fullName}`);
+      navigate(resolveDestination(res.data.role), { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in right now.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(null);
-    toast.success(`Welcome back, ${res.data.fullName}`);
-    navigate(resolveDestination(res.data.role), { replace: true });
   };
 
   return (
@@ -103,9 +112,10 @@ export function LoginPage() {
 
         <button
           type="submit"
-          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          disabled={submitting}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Sign In
+          {submitting ? "Signing In..." : "Sign In"}
         </button>
       </form>
 

@@ -75,36 +75,47 @@ export function InvestmentsPage() {
     setAllocError(null);
   };
 
-  const handleSubscribe = (e: FormEvent) => {
+  const handleSubscribe = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedPlan) return;
+    if (!selectedPlan || allocSubmitting) return;
     setAllocError(null);
     setAllocSubmitting(true);
-    const res = subscribeInvestment({
-      planId: selectedPlan.id,
-      amount: Number(amountInput),
-      autoCompound,
-    });
-    setAllocSubmitting(false);
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? "Unable to allocate funds.";
+    try {
+      const res = await subscribeInvestment({
+        planId: selectedPlan.id,
+        amount: Number(amountInput),
+        autoCompound,
+      });
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? "Unable to allocate funds.";
+        setAllocError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(`Allocated ${formatNaira(res.data.principal)} into ${res.data.planName}.`);
+      setSelectedPlan(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to allocate funds.";
       setAllocError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setAllocSubmitting(false);
     }
-    toast.success(`Allocated ${formatNaira(res.data.principal)} into ${res.data.planName}.`);
-    setSelectedPlan(null);
   };
 
-  const handleToggleAutoCompound = (investmentId: string) => {
-    const res = toggleInvestmentAutoCompound(investmentId);
-    if (!res.ok || !res.data) {
-      toast.error(res.error ?? "Unable to update auto-compound preference.");
-      return;
+  const handleToggleAutoCompound = async (investmentId: string) => {
+    try {
+      const res = await toggleInvestmentAutoCompound(investmentId);
+      if (!res.ok || !res.data) {
+        toast.error(res.error ?? "Unable to update auto-compound preference.");
+        return;
+      }
+      toast.success(
+        `Auto-compound ${res.data.autoCompound ? "enabled" : "disabled"} for ${res.data.planName}.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update auto-compound preference.");
     }
-    toast.success(
-      `Auto-compound ${res.data.autoCompound ? "enabled" : "disabled"} for ${res.data.planName}.`,
-    );
   };
 
   const selectedInvestment =

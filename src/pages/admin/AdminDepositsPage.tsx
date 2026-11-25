@@ -61,7 +61,7 @@ export function AdminDepositsPage() {
     );
   };
 
-  const handleConfirmReview = (e: FormEvent) => {
+  const handleConfirmReview = async (e: FormEvent) => {
     e.preventDefault();
     if (!reviewDraft || submitting) return;
     if (reviewDraft.decision === "Declined" && !reviewNote.trim()) {
@@ -72,7 +72,7 @@ export function AdminDepositsPage() {
     setReviewError(null);
     setSubmitting(true);
     try {
-      const res = adminReviewTransaction(
+      const res = await adminReviewTransaction(
         reviewDraft.txn.id,
         reviewDraft.decision,
         reviewNote.trim() ||
@@ -90,6 +90,8 @@ export function AdminDepositsPage() {
       setReviewDraft(null);
       setReviewNote("");
       setReviewError(null);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Unable to review deposit.");
     } finally {
       setSubmitting(false);
     }

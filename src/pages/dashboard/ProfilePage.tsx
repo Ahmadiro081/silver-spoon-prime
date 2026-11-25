@@ -26,6 +26,7 @@ export function ProfilePage() {
   const [city, setCity] = useState(currentUser.city);
   const [address, setAddress] = useState(currentUser.address);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
 
   // Simulated KYC submission state
   const defaultTargetTier: "Tier 2" | "Tier 3" =
@@ -60,17 +61,27 @@ export function ProfilePage() {
     resetVersion,
   ]);
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
+    if (profileSubmitting) return;
     setProfileError(null);
-    const res = updateProfile({ fullName, phone, city, address });
-    if (!res.ok) {
-      const msg = res.error ?? "Unable to update profile.";
+    setProfileSubmitting(true);
+    try {
+      const res = await updateProfile({ fullName, phone, city, address });
+      if (!res.ok) {
+        const msg = res.error ?? "Unable to update profile.";
+        setProfileError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success("Client profile updated.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to update profile.";
       setProfileError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setProfileSubmitting(false);
     }
-    toast.success("Client profile updated.");
   };
 
   const handleFileSelect = (
@@ -86,36 +97,44 @@ export function ProfilePage() {
     if (kycError) setKycError(null);
   };
 
-  const handleKycSubmit = (e: FormEvent) => {
+  const handleKycSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (kycSubmitting) return;
     setKycError(null);
     setKycSubmitting(true);
-    const res = submitKycApplication({
-      targetTier,
-      idType,
-      idNumber,
-      bvn,
-      dateOfBirth,
-      residentialAddress: kycAddress,
-      idDocumentName,
-      proofOfAddressName: targetTier === "Tier 3" ? proofOfAddressName : undefined,
-    });
-    setKycSubmitting(false);
+    try {
+      const res = await submitKycApplication({
+        targetTier,
+        idType,
+        idNumber,
+        bvn,
+        dateOfBirth,
+        residentialAddress: kycAddress,
+        idDocumentName,
+        proofOfAddressName: targetTier === "Tier 3" ? proofOfAddressName : undefined,
+      });
 
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? "Unable to submit KYC application.";
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? "Unable to submit KYC application.";
+        setKycError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setIdNumber("");
+      setBvn("");
+      setIdDocumentName("");
+      setProofOfAddressName("");
+      toast.success(
+        `Simulated ${res.data.targetTier} KYC application (${res.data.id}) submitted for compliance review.`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to submit KYC application.";
       setKycError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setKycSubmitting(false);
     }
-
-    setIdNumber("");
-    setBvn("");
-    setIdDocumentName("");
-    setProofOfAddressName("");
-    toast.success(
-      `Simulated ${res.data.targetTier} KYC application (${res.data.id}) submitted for compliance review.`,
-    );
   };
 
   const pendingSubmission = userKycSubmissions.find((s) => s.status === "Under Review");
@@ -296,9 +315,10 @@ export function ProfilePage() {
 
               <button
                 type="submit"
-                className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:w-auto"
+                disabled={profileSubmitting}
+                className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
-                Save Profile Changes
+                {profileSubmitting ? "Saving..." : "Save Profile Changes"}
               </button>
             </form>
           </div>

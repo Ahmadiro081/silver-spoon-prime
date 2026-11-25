@@ -85,8 +85,8 @@ export function UserDashboardLayout({
     };
   }, [sidebarOpen]);
 
-  const handleSignOut = () => {
-    logout();
+  const handleSignOut = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 

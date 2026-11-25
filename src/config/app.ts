@@ -11,7 +11,7 @@ export const APP_CONFIG = {
     symbol: "₦",
     locale: "en-NG",
   },
-  dataProvider: getSupabasePublicConfig().activeProvider,
+  dataProvider: getSupabasePublicConfig().activeProvider ?? "invalid",
   futureBackend: {
     database: "PostgreSQL (planned — Phase A preparation)",
     authentication: "Server-side Auth + Row Level Security (planned)",

@@ -26,72 +26,101 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   // Simulated 2FA enrollment / disable modal states
   const [enable2faOpen, setEnable2faOpen] = useState(false);
   const [enable2faCode, setEnable2faCode] = useState("");
   const [enable2faError, setEnable2faError] = useState<string | null>(null);
+  const [enable2faSubmitting, setEnable2faSubmitting] = useState(false);
 
   const [disable2faOpen, setDisable2faOpen] = useState(false);
   const [disable2faPassword, setDisable2faPassword] = useState("");
   const [disable2faError, setDisable2faError] = useState<string | null>(null);
+  const [disable2faSubmitting, setDisable2faSubmitting] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
-  const toggleCommunicationSetting = (key: "emailAlerts" | "smsAlerts") => {
-    const next = !currentUser[key];
-    const res = updateProfile({ [key]: next });
-    if (!res.ok) {
-      toast.error(res.error ?? "Unable to update preference.");
-      return;
+  const toggleCommunicationSetting = async (key: "emailAlerts" | "smsAlerts") => {
+    try {
+      const next = !currentUser[key];
+      const res = await updateProfile({ [key]: next });
+      if (!res.ok) {
+        toast.error(res.error ?? "Unable to update preference.");
+        return;
+      }
+      toast.success("Notification preference updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update preference.");
     }
-    toast.success("Notification preference updated.");
   };
 
-  const handleTwoFactorToggleClick = () => {
+  const handleTwoFactorToggleClick = async () => {
     if (currentUser.twoFactorEnabled) {
       setDisable2faPassword("");
       setDisable2faError(null);
       setDisable2faOpen(true);
       return;
     }
-    const challenge = requestTwoFactorChallenge("simulated 2FA enrollment");
-    if (!challenge.ok) {
-      toast.error(challenge.error ?? "Unable to initiate simulated 2FA setup.");
-      return;
+    try {
+      const challenge = await requestTwoFactorChallenge("simulated 2FA enrollment");
+      if (!challenge.ok) {
+        toast.error(challenge.error ?? "Unable to initiate simulated 2FA setup.");
+        return;
+      }
+      setEnable2faCode("");
+      setEnable2faError(null);
+      setEnable2faOpen(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to initiate simulated 2FA setup.");
     }
-    setEnable2faCode("");
-    setEnable2faError(null);
-    setEnable2faOpen(true);
   };
 
-  const handleEnableTwoFactorSubmit = (e: FormEvent) => {
+  const handleEnableTwoFactorSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (enable2faSubmitting) return;
     setEnable2faError(null);
-    const res = enableTwoFactor(enable2faCode);
-    if (!res.ok) {
-      setEnable2faError(res.error ?? "Unable to enable simulated 2FA.");
-      return;
+    setEnable2faSubmitting(true);
+    try {
+      const res = await enableTwoFactor(enable2faCode);
+      if (!res.ok) {
+        setEnable2faError(res.error ?? "Unable to enable simulated 2FA.");
+        return;
+      }
+      setEnable2faOpen(false);
+      setEnable2faCode("");
+      toast.success("Simulated 2FA enabled for withdrawal requests.");
+    } catch (err) {
+      setEnable2faError(err instanceof Error ? err.message : "Unable to enable simulated 2FA.");
+    } finally {
+      setEnable2faSubmitting(false);
     }
-    setEnable2faOpen(false);
-    setEnable2faCode("");
-    toast.success("Simulated 2FA enabled for withdrawal requests.");
   };
 
-  const handleDisableTwoFactorSubmit = (e: FormEvent) => {
+  const handleDisableTwoFactorSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (disable2faSubmitting) return;
     setDisable2faError(null);
-    const res = disableTwoFactor(disable2faPassword);
-    if (!res.ok) {
-      setDisable2faError(res.error ?? "Unable to disable simulated 2FA.");
-      return;
+    setDisable2faSubmitting(true);
+    try {
+      const res = await disableTwoFactor(disable2faPassword);
+      if (!res.ok) {
+        setDisable2faError(res.error ?? "Unable to disable simulated 2FA.");
+        return;
+      }
+      setDisable2faOpen(false);
+      setDisable2faPassword("");
+      toast.success("Simulated 2FA disabled.");
+    } catch (err) {
+      setDisable2faError(err instanceof Error ? err.message : "Unable to disable simulated 2FA.");
+    } finally {
+      setDisable2faSubmitting(false);
     }
-    setDisable2faOpen(false);
-    setDisable2faPassword("");
-    toast.success("Simulated 2FA disabled.");
   };
 
-  const handlePasswordChange = (e: FormEvent) => {
+  const handlePasswordChange = async (e: FormEvent) => {
     e.preventDefault();
+    if (passwordSubmitting) return;
     setPasswordError(null);
 
     if (newPassword.length < 8) {
@@ -103,16 +132,23 @@ export function SettingsPage() {
       return;
     }
 
-    const res = changePassword(currentPassword, newPassword);
-    if (!res.ok) {
-      setPasswordError(res.error ?? "Unable to update password.");
-      return;
-    }
+    setPasswordSubmitting(true);
+    try {
+      const res = await changePassword(currentPassword, newPassword);
+      if (!res.ok) {
+        setPasswordError(res.error ?? "Unable to update password.");
+        return;
+      }
 
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    toast.success("Simulated account password updated.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Simulated account password updated.");
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Unable to update password.");
+    } finally {
+      setPasswordSubmitting(false);
+    }
   };
 
   return (
@@ -271,9 +307,10 @@ export function SettingsPage() {
               </Link>
               <button
                 type="submit"
-                className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                disabled={passwordSubmitting}
+                className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Update Password
+                {passwordSubmitting ? "Updating..." : "Update Password"}
               </button>
             </div>
           </form>
@@ -379,8 +416,8 @@ export function SettingsPage() {
               <span className="font-semibold text-foreground">Simulated Setup Code</span>
               <button
                 type="button"
-                onClick={() => {
-                  requestTwoFactorChallenge("simulated 2FA enrollment");
+                onClick={async () => {
+                  await requestTwoFactorChallenge("simulated 2FA enrollment");
                   setEnable2faCode("");
                   setEnable2faError(null);
                 }}
@@ -428,10 +465,10 @@ export function SettingsPage() {
             </button>
             <button
               type="submit"
-              disabled={enable2faCode.length !== 6}
+              disabled={enable2faCode.length !== 6 || enable2faSubmitting}
               className="h-10 rounded-lg bg-primary px-5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Confirm & Enable 2FA
+              {enable2faSubmitting ? "Enabling..." : "Confirm & Enable 2FA"}
             </button>
           </div>
         </form>
@@ -483,10 +520,10 @@ export function SettingsPage() {
             </button>
             <button
               type="submit"
-              disabled={!disable2faPassword.trim()}
+              disabled={!disable2faPassword.trim() || disable2faSubmitting}
               className="h-10 rounded-lg bg-destructive px-5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Disable Simulated 2FA
+              {disable2faSubmitting ? "Disabling..." : "Disable Simulated 2FA"}
             </button>
           </div>
         </form>
@@ -495,10 +532,16 @@ export function SettingsPage() {
       <ConfirmDialog
         open={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
-        onConfirm={() => {
-          resetDemoState();
-          setResetConfirmOpen(false);
-          toast.success("Local test data cleared. You have been signed out.");
+        busy={resetting}
+        onConfirm={async () => {
+          setResetting(true);
+          try {
+            await resetDemoState();
+            setResetConfirmOpen(false);
+            toast.success("Local test data cleared. You have been signed out.");
+          } finally {
+            setResetting(false);
+          }
         }}
         title="Clear Local Test Data?"
         subtitle="Reset Browser Storage"
@@ -519,7 +562,7 @@ function SettingRow({
   title: string;
   description: string;
   enabled: boolean;
-  onToggle: () => void;
+  onToggle: () => void | Promise<void>;
 }) {
   const titleId = useId();
   const descriptionId = useId();

@@ -48,11 +48,11 @@ export function AdminInvestmentsPage() {
       )
     : null;
 
-  const confirmMature = () => {
+  const confirmMature = async () => {
     if (!maturingInv || settling) return;
     setSettling(true);
     try {
-      const res = adminMatureInvestment(maturingInv.id);
+      const res = await adminMatureInvestment(maturingInv.id);
       if (!res.ok) {
         toast.error(res.error ?? "Unable to settle investment.");
         return;
@@ -71,6 +71,8 @@ export function AdminInvestmentsPage() {
         );
       }
       setMaturingInv(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to settle investment.");
     } finally {
       setSettling(false);
     }

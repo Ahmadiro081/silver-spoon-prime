@@ -61,7 +61,7 @@ export function AdminWithdrawalsPage() {
     );
   };
 
-  const handleConfirmReview = (e: FormEvent) => {
+  const handleConfirmReview = async (e: FormEvent) => {
     e.preventDefault();
     if (!reviewDraft || submitting) return;
     if (reviewDraft.decision === "Declined" && !reviewNote.trim()) {
@@ -72,7 +72,7 @@ export function AdminWithdrawalsPage() {
     setReviewError(null);
     setSubmitting(true);
     try {
-      const res = adminReviewTransaction(
+      const res = await adminReviewTransaction(
         reviewDraft.txn.id,
         reviewDraft.decision,
         reviewNote.trim() ||
@@ -92,6 +92,8 @@ export function AdminWithdrawalsPage() {
       setReviewDraft(null);
       setReviewNote("");
       setReviewError(null);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Unable to process withdrawal review.");
     } finally {
       setSubmitting(false);
     }

@@ -41,14 +41,17 @@ export function AdminSettingsPage() {
   const [draft, setDraft] = useState<SettingsDraft>(() => toDraft(settings));
   const [validationError, setValidationError] = useState<string | null>(null);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     setDraft(toDraft(settings));
     setValidationError(null);
   }, [settings, resetVersion]);
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const candidate: PlatformSettings = {
       ...settings,
       minDepositAmount: parseStrictNumber(draft.minDepositAmount),
@@ -68,15 +71,24 @@ export function AdminSettingsPage() {
       return;
     }
 
-    const res = adminUpdateSettings(candidate);
-    if (!res.ok) {
-      const msg = res.error ?? "Unable to update platform settings.";
+    setSaving(true);
+    try {
+      const res = await adminUpdateSettings(candidate);
+      if (!res.ok) {
+        const msg = res.error ?? "Unable to update platform settings.";
+        setValidationError(msg);
+        toast.error(msg);
+        return;
+      }
+      setValidationError(null);
+      toast.success("Platform operational settings updated and logged.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to update platform settings.";
       setValidationError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setSaving(false);
     }
-    setValidationError(null);
-    toast.success("Platform operational settings updated and logged.");
   };
 
   return (
@@ -238,9 +250,10 @@ export function AdminSettingsPage() {
             </button>
             <button
               type="submit"
-              className="h-10 rounded-lg bg-primary px-6 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              disabled={saving}
+              className="h-10 rounded-lg bg-primary px-6 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Save Platform Settings
+              {saving ? "Saving..." : "Save Platform Settings"}
             </button>
           </div>
         </form>
@@ -285,10 +298,16 @@ export function AdminSettingsPage() {
       <ConfirmDialog
         open={confirmResetOpen}
         onClose={() => setConfirmResetOpen(false)}
-        onConfirm={() => {
-          resetDemoState();
-          setConfirmResetOpen(false);
-          toast.success("Cleared local test data and reset to a clean empty state.");
+        busy={resetting}
+        onConfirm={async () => {
+          setResetting(true);
+          try {
+            await resetDemoState();
+            setConfirmResetOpen(false);
+            toast.success("Cleared local test data and reset to a clean empty state.");
+          } finally {
+            setResetting(false);
+          }
         }}
         title="Clear Local Test Data?"
         subtitle="Reset Local Browser Storage"

@@ -17,20 +17,29 @@ export function RegisterPage() {
   const [referralCode, setReferralCode] = useState(searchParams.get("ref") ?? "");
   const [accepted, setAccepted] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!accepted) {
       setError("Please confirm you have read the Terms & Risk Disclosures.");
       return;
     }
-    const res = register({ fullName, email, phone, password, referralCode });
-    if (!res.ok || !res.data) {
-      setError(res.error ?? "Unable to create account.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await register({ fullName, email, phone, password, referralCode });
+      if (!res.ok || !res.data) {
+        setError(res.error ?? "Unable to create account.");
+        return;
+      }
+      toast.success("Account created. Complete simulated email verification to finish onboarding.");
+      navigate(`/verify-email?email=${encodeURIComponent(res.data.email)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create account.");
+    } finally {
+      setSubmitting(false);
     }
-    toast.success("Account created. Complete simulated email verification to finish onboarding.");
-    navigate(`/verify-email?email=${encodeURIComponent(res.data.email)}`);
   };
 
   return (
@@ -160,9 +169,10 @@ export function RegisterPage() {
 
         <button
           type="submit"
-          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          disabled={submitting}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Create Client Account
+          {submitting ? "Creating Account..." : "Create Client Account"}
         </button>
       </form>
     </AuthLayout>

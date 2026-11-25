@@ -20,8 +20,8 @@ function UnauthorizedRoleView({
     navigate(currentRole === "admin" ? "/admin" : "/dashboard", { replace: true });
   };
 
-  const handleSignOut = () => {
-    logout();
+  const handleSignOut = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 

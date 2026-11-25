@@ -209,7 +209,7 @@ export function SlideOverDrawer({
 interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   subtitle?: string;
   description: string;
@@ -233,6 +233,18 @@ export function ConfirmDialog({
   tone = "primary",
   busy = false,
 }: ConfirmDialogProps) {
+  const confirmingRef = useRef(false);
+
+  const handleConfirmClick = async () => {
+    if (busy || confirmingRef.current) return;
+    confirmingRef.current = true;
+    try {
+      await onConfirm();
+    } finally {
+      confirmingRef.current = false;
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} maxWidthClass="max-w-md">
       <div className="space-y-4">
@@ -258,7 +270,9 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={() => {
+              void handleConfirmClick();
+            }}
             disabled={busy}
             className={`inline-flex h-10 items-center justify-center rounded-lg px-5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               tone === "destructive"

@@ -18,6 +18,7 @@ export function AdminReferralsPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | ReferralRecord["status"]>("ALL");
   const [settleTarget, setSettleTarget] = useState<ReferralRecord | null>(null);
+  const [settling, setSettling] = useState(false);
 
   const hasFilters = Boolean(query.trim()) || statusFilter !== "ALL";
 
@@ -43,12 +44,20 @@ export function AdminReferralsPage() {
     .reduce((s, r) => s + r.commissionEarned, 0);
   const totalVolume = referrals.reduce((s, r) => s + r.qualifyingInvestment, 0);
 
-  const settleCommission = (id: string, name: string) => {
-    const res = adminMarkReferralPaid(id);
-    if (res.ok) {
-      toast.success(`Settled referral commission for ${name}.`);
-    } else {
-      toast.error(res.error ?? "Unable to settle referral commission.");
+  const settleCommission = async (id: string, name: string) => {
+    if (settling) return;
+    setSettling(true);
+    try {
+      const res = await adminMarkReferralPaid(id);
+      if (res.ok) {
+        toast.success(`Settled referral commission for ${name}.`);
+      } else {
+        toast.error(res.error ?? "Unable to settle referral commission.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to settle referral commission.");
+    } finally {
+      setSettling(false);
     }
   };
 
@@ -190,9 +199,10 @@ export function AdminReferralsPage() {
       <ConfirmDialog
         open={Boolean(settleTarget)}
         onClose={() => setSettleTarget(null)}
-        onConfirm={() => {
+        busy={settling}
+        onConfirm={async () => {
           if (!settleTarget) return;
-          settleCommission(settleTarget.id, settleTarget.referrerName);
+          await settleCommission(settleTarget.id, settleTarget.referrerName);
           setSettleTarget(null);
         }}
         title="Settle Referral Commission?"

@@ -17,21 +17,30 @@ export function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (newPassword !== confirmPassword) {
       setError("Password confirmation does not match.");
       return;
     }
-    const res = resetPassword(email, token, newPassword);
-    if (!res.ok) {
-      setError(res.error ?? "Unable to reset password.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await resetPassword(email, token, newPassword);
+      if (!res.ok) {
+        setError(res.error ?? "Unable to reset password.");
+        return;
+      }
+      setError(null);
+      setCompleted(true);
+      toast.success("Password updated. You can now sign in with your new credentials.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to reset password.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(null);
-    setCompleted(true);
-    toast.success("Password updated. You can now sign in with your new credentials.");
   };
 
   return (
@@ -141,9 +150,10 @@ export function ResetPasswordPage() {
 
           <button
             type="submit"
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={submitting}
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Confirm New Password
+            {submitting ? "Updating Password..." : "Confirm New Password"}
           </button>
         </form>
       )}

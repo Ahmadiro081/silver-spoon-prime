@@ -18,34 +18,52 @@ export function VerifyEmailPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [issuingCode, setIssuingCode] = useState(false);
 
   const accountEmail = authenticatedUser?.email ?? "";
   const isAlreadyVerified = Boolean(authenticatedUser?.emailVerified) || verified;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!authenticatedUser) {
       setError("Sign in to your account before verifying your email address.");
       return;
     }
-    const res = verifyEmail(authenticatedUser.email, code);
-    if (!res.ok) {
-      setError(res.error ?? "Verification failed.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await verifyEmail(authenticatedUser.email, code);
+      if (!res.ok) {
+        setError(res.error ?? "Verification failed.");
+        return;
+      }
+      setError(null);
+      setVerified(true);
+      toast.success("Email address verified in simulation mode.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(null);
-    setVerified(true);
-    toast.success("Email address verified in simulation mode.");
   };
 
-  const handleIssueCode = () => {
+  const handleIssueCode = async () => {
+    if (issuingCode) return;
     setError(null);
-    const res = requestVerificationCode();
-    if (!res.ok || !res.data) {
-      setError(res.error ?? "Unable to issue a verification code.");
-      return;
+    setIssuingCode(true);
+    try {
+      const res = await requestVerificationCode();
+      if (!res.ok || !res.data) {
+        setError(res.error ?? "Unable to issue a verification code.");
+        return;
+      }
+      toast.info(`Simulated verification code issued: ${res.data.code}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to issue a verification code.");
+    } finally {
+      setIssuingCode(false);
     }
-    toast.info(`Simulated verification code issued: ${res.data.code}`);
   };
 
   const workspacePath = authenticatedUser?.role === "admin" ? "/admin" : "/dashboard";
@@ -141,10 +159,15 @@ export function VerifyEmailPage() {
               </label>
               <button
                 type="button"
+                disabled={issuingCode}
                 onClick={handleIssueCode}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
               >
-                {pendingVerificationCode ? "Resend code" : "Issue verification code"}
+                {issuingCode
+                  ? "Issuing code..."
+                  : pendingVerificationCode
+                    ? "Resend code"
+                    : "Issue verification code"}
               </button>
             </div>
             <input
@@ -166,9 +189,10 @@ export function VerifyEmailPage() {
 
           <button
             type="submit"
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={submitting}
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Verify Email Address
+            {submitting ? "Verifying..." : "Verify Email Address"}
           </button>
 
           <button

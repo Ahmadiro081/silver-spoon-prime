@@ -117,8 +117,8 @@ export function AdminDashboardLayout({
     kycSubmissions.filter((s) => s.status === "Under Review").length,
   );
 
-  const handleSignOut = () => {
-    logout();
+  const handleSignOut = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 

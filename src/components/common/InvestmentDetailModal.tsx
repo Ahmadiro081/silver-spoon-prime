@@ -15,7 +15,7 @@ export function InvestmentDetailModal({
   investment: InvestmentRecord | null;
   plan?: InvestmentPlan;
   onClose: () => void;
-  onToggleAutoCompound?: (investmentId: string) => void;
+  onToggleAutoCompound?: (investmentId: string) => void | Promise<void>;
 }) {
   if (!investment) return null;
 

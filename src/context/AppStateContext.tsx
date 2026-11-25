@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
-import type { KycSubmissionInput, PlatformServiceContract } from "@/services/platformService";
+import type { DataProviderId } from "@/services/dataProvider";
+import type { PlatformServiceContract } from "@/services/platformService";
 import type {
   AuditLogEntry,
   InvestmentPlan,
@@ -8,7 +9,6 @@ import type {
   NotificationItem,
   PlatformSettings,
   ReferralRecord,
-  ServiceResult,
   SessionState,
   TransactionRecord,
   UserNotificationItem,
@@ -17,6 +17,18 @@ import type {
 } from "@/types/domain";
 
 export interface AppStateContextValue extends PlatformServiceContract {
+  // Provider & async execution metadata (Phase 6.2)
+  activeProvider: DataProviderId | null;
+  providerStandby: boolean;
+  providerError: string | null;
+  isLoading: boolean;
+  isMutating: boolean;
+  pendingOperations: string[];
+  isOperationPending: (operationKey: string) => boolean;
+  lastError: string | null;
+  clearLastError: () => void;
+
+  // Domain state snapshot
   session: SessionState;
   currentUser: UserProfile;
   authenticatedUser: UserProfile | null;
@@ -30,6 +42,7 @@ export interface AppStateContextValue extends PlatformServiceContract {
   auditLogs: AuditLogEntry[];
   settings: PlatformSettings;
   kycSubmissions: KycSubmissionRecord[];
+
   // Strictly isolated derived views for the authenticated account
   userWallet: WalletMetrics;
   userTransactions: TransactionRecord[];
@@ -40,12 +53,6 @@ export interface AppStateContextValue extends PlatformServiceContract {
   unreadNotificationCount: number;
   pendingVerificationCode: string | null;
   pendingTwoFactorCode: string | null;
-  requestVerificationCode: () => ServiceResult<{ code: string }>;
-  requestTwoFactorChallenge: (purpose?: string) => ServiceResult<{ code: string }>;
-  enableTwoFactor: (code: string) => ServiceResult;
-  disableTwoFactor: (currentPassword: string) => ServiceResult;
-  submitKycApplication: (input: KycSubmissionInput) => ServiceResult<KycSubmissionRecord>;
-  adminVerifyUserBankAccount: (userId: string) => ServiceResult;
 }
 
 export const AppStateContext = createContext<AppStateContextValue | null>(null);

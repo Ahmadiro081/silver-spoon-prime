@@ -769,24 +769,31 @@ export function buildMaturitySettlementBundle(params: {
 }
 
 export interface PlatformServiceContract {
-  login: (email: string, password: string) => ServiceResult<UserProfile>;
+  // Authentication & Account Management
+  login: (email: string, password: string) => Promise<ServiceResult<UserProfile>>;
   register: (payload: {
     fullName: string;
     email: string;
     phone: string;
     password: string;
     referralCode?: string;
-  }) => ServiceResult<UserProfile>;
-  logout: () => void;
-  switchRoleDemo: (role: "investor" | "admin") => void;
-  verifyEmail: (email: string, code: string) => ServiceResult<UserProfile>;
-  requestPasswordReset: (email: string) => ServiceResult<{ resetToken: string }>;
-  resetPassword: (email: string, token: string, newPassword: string) => ServiceResult;
-  changePassword: (currentPassword: string, newPassword: string) => ServiceResult;
-  createDeposit: (input: DepositInput) => ServiceResult<TransactionRecord>;
-  requestWithdrawal: (input: WithdrawalInput) => ServiceResult<TransactionRecord>;
-  subscribeInvestment: (input: SubscribeInvestmentInput) => ServiceResult<InvestmentRecord>;
-  toggleInvestmentAutoCompound: (investmentId: string) => ServiceResult<InvestmentRecord>;
+  }) => Promise<ServiceResult<UserProfile>>;
+  logout: () => Promise<void>;
+  switchRoleDemo: (role: "investor" | "admin") => Promise<void>;
+  requestVerificationCode: () => Promise<ServiceResult<{ code: string }>>;
+  verifyEmail: (email: string, code: string) => Promise<ServiceResult<UserProfile>>;
+  requestPasswordReset: (email: string) => Promise<ServiceResult<{ resetToken: string }>>;
+  resetPassword: (email: string, token: string, newPassword: string) => Promise<ServiceResult>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<ServiceResult>;
+  requestTwoFactorChallenge: (purpose?: string) => Promise<ServiceResult<{ code: string }>>;
+  enableTwoFactor: (code: string) => Promise<ServiceResult>;
+  disableTwoFactor: (currentPassword: string) => Promise<ServiceResult>;
+
+  // Investor Financial, Profile, KYC & Notification Operations
+  createDeposit: (input: DepositInput) => Promise<ServiceResult<TransactionRecord>>;
+  requestWithdrawal: (input: WithdrawalInput) => Promise<ServiceResult<TransactionRecord>>;
+  subscribeInvestment: (input: SubscribeInvestmentInput) => Promise<ServiceResult<InvestmentRecord>>;
+  toggleInvestmentAutoCompound: (investmentId: string) => Promise<ServiceResult<InvestmentRecord>>;
   updateProfile: (
     updates: Partial<
       Pick<
@@ -794,22 +801,30 @@ export interface PlatformServiceContract {
         "fullName" | "phone" | "city" | "address" | "twoFactorEnabled" | "emailAlerts" | "smsAlerts"
       >
     >,
-  ) => ServiceResult;
-  updateBankAccount: (bank: BankAccountDetails) => ServiceResult;
-  markNotificationRead: (id: string) => void;
-  markAllNotificationsRead: () => void;
-  // Admin methods
-  adminReviewTransaction: (txnId: string, status: TransactionStatus, note?: string) => ServiceResult;
+  ) => Promise<ServiceResult>;
+  updateBankAccount: (bank: BankAccountDetails) => Promise<ServiceResult>;
+  submitKycApplication: (input: KycSubmissionInput) => Promise<ServiceResult<KycSubmissionRecord>>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+
+  // Administrator, Finance & Compliance Operations
+  adminReviewTransaction: (
+    txnId: string,
+    status: TransactionStatus,
+    note?: string,
+  ) => Promise<ServiceResult>;
   adminMatureInvestment: (
     investmentId: string,
-  ) => ServiceResult<{
-    realizedReturn: number;
-    rolledOverInvestmentId?: string;
-    rolloverPrincipal?: number;
-    rolloverSkippedReason?: string;
-  }>;
-  adminUpdateUserStatus: (userId: string, status: AccountStatus) => ServiceResult;
-  adminUpdateUserTier: (userId: string, tier: UserProfile["tier"]) => ServiceResult;
+  ) => Promise<
+    ServiceResult<{
+      realizedReturn: number;
+      rolledOverInvestmentId?: string;
+      rolloverPrincipal?: number;
+      rolloverSkippedReason?: string;
+    }>
+  >;
+  adminUpdateUserStatus: (userId: string, status: AccountStatus) => Promise<ServiceResult>;
+  adminUpdateUserTier: (userId: string, tier: UserProfile["tier"]) => Promise<ServiceResult>;
   adminReviewUserKyc: (
     userId: string,
     decision: {
@@ -817,17 +832,21 @@ export interface PlatformServiceContract {
       kycLevel: UserProfile["kycLevel"];
       note?: string;
     },
-  ) => ServiceResult;
-  adminCreatePlan: (input: CreatePlanInput) => ServiceResult<InvestmentPlan>;
-  adminTogglePlanStatus: (planId: string, status: InvestmentPlan["status"]) => ServiceResult;
-  adminUpdatePlan: (planId: string, updates: Partial<InvestmentPlan>) => ServiceResult;
+  ) => Promise<ServiceResult>;
+  adminVerifyUserBankAccount: (userId: string) => Promise<ServiceResult>;
+  adminCreatePlan: (input: CreatePlanInput) => Promise<ServiceResult<InvestmentPlan>>;
+  adminTogglePlanStatus: (
+    planId: string,
+    status: InvestmentPlan["status"],
+  ) => Promise<ServiceResult>;
+  adminUpdatePlan: (planId: string, updates: Partial<InvestmentPlan>) => Promise<ServiceResult>;
   adminSendNotification: (payload: {
     userId: string | "ALL";
     title: string;
     message: string;
     category: NotificationCategory;
-  }) => ServiceResult;
-  adminUpdateSettings: (updates: Partial<PlatformSettings>) => ServiceResult;
-  adminMarkReferralPaid: (referralId: string) => ServiceResult;
-  resetDemoState: () => void;
+  }) => Promise<ServiceResult>;
+  adminUpdateSettings: (updates: Partial<PlatformSettings>) => Promise<ServiceResult>;
+  adminMarkReferralPaid: (referralId: string) => Promise<ServiceResult>;
+  resetDemoState: () => Promise<void>;
 }

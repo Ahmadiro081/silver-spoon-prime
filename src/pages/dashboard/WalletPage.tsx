@@ -109,60 +109,81 @@ export function WalletPage() {
   const usedDailyWithdrawal = calculateDailyWithdrawalTotal(userTransactions, currentUser.id);
   const remainingDailyWithdrawal = Math.max(0, settings.maxDailyWithdrawal - usedDailyWithdrawal);
 
-  const handleDeposit = (e: FormEvent) => {
+  const handleDeposit = async (e: FormEvent) => {
     e.preventDefault();
+    if (depSubmitting) return;
     setDepError(null);
     setDepSubmitting(true);
-    const res = createDeposit({
-      amount: Number(depAmount),
-      channel: depChannel,
-      note: depNote,
-    });
-    setDepSubmitting(false);
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? "Deposit could not be processed.";
+    try {
+      const res = await createDeposit({
+        amount: Number(depAmount),
+        channel: depChannel,
+        note: depNote,
+      });
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? "Deposit could not be processed.";
+        setDepError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(
+        res.data.status === "Completed"
+          ? `Simulated deposit of ${formatNaira(res.data.amount)} credited instantly.`
+          : `Simulated deposit of ${formatNaira(res.data.amount)} queued for Admin confirmation.`,
+      );
+      setDepNote("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Deposit could not be processed.";
       setDepError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setDepSubmitting(false);
     }
-    toast.success(
-      res.data.status === "Completed"
-        ? `Simulated deposit of ${formatNaira(res.data.amount)} credited instantly.`
-        : `Simulated deposit of ${formatNaira(res.data.amount)} queued for Admin confirmation.`,
-    );
-    setDepNote("");
   };
 
-  const executeWithdrawal = (twoFactorCode?: string) => {
+  const executeWithdrawal = async (twoFactorCode?: string) => {
+    if (wdrSubmitting) return;
     setWdrSubmitting(true);
-    const res = requestWithdrawal({
-      amount: Number(wdrAmount),
-      note: wdrNote,
-      twoFactorCode,
-    });
-    setWdrSubmitting(false);
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? "Withdrawal request failed.";
+    try {
+      const res = await requestWithdrawal({
+        amount: Number(wdrAmount),
+        note: wdrNote,
+        twoFactorCode,
+      });
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? "Withdrawal request failed.";
+        if (twoFactorModalOpen) {
+          setTwoFactorError(msg);
+        } else {
+          setWdrError(msg);
+        }
+        toast.error(msg);
+        return;
+      }
+      setTwoFactorModalOpen(false);
+      setTwoFactorInput("");
+      setTwoFactorError(null);
+      setWdrError(null);
+      toast.success(
+        `Withdrawal request (${res.data.reference}) for ${formatNaira(res.data.amount)} submitted for treasury approval.`,
+      );
+      setWdrNote("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Withdrawal request failed.";
       if (twoFactorModalOpen) {
         setTwoFactorError(msg);
       } else {
         setWdrError(msg);
       }
       toast.error(msg);
-      return;
+    } finally {
+      setWdrSubmitting(false);
     }
-    setTwoFactorModalOpen(false);
-    setTwoFactorInput("");
-    setTwoFactorError(null);
-    setWdrError(null);
-    toast.success(
-      `Withdrawal request (${res.data.reference}) for ${formatNaira(res.data.amount)} submitted for treasury approval.`,
-    );
-    setWdrNote("");
   };
 
-  const handleWithdraw = (e: FormEvent) => {
+  const handleWithdraw = async (e: FormEvent) => {
     e.preventDefault();
+    if (wdrSubmitting) return;
     setWdrError(null);
 
     const parsedAmount = Number(wdrAmount);
@@ -181,41 +202,55 @@ export function WalletPage() {
     }
 
     if (currentUser.twoFactorEnabled) {
-      const challenge = requestTwoFactorChallenge("withdrawal disbursement");
-      if (!challenge.ok) {
-        const msg = challenge.error ?? "Unable to issue simulated 2FA code.";
+      setWdrSubmitting(true);
+      try {
+        const challenge = await requestTwoFactorChallenge("withdrawal disbursement");
+        if (!challenge.ok) {
+          const msg = challenge.error ?? "Unable to issue simulated 2FA code.";
+          setWdrError(msg);
+          toast.error(msg);
+          return;
+        }
+        setTwoFactorInput("");
+        setTwoFactorError(null);
+        setTwoFactorModalOpen(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unable to issue simulated 2FA code.";
         setWdrError(msg);
         toast.error(msg);
+      } finally {
+        setWdrSubmitting(false);
+      }
+      return;
+    }
+
+    await executeWithdrawal();
+  };
+
+  const handleConfirmTwoFactorWithdrawal = async (e: FormEvent) => {
+    e.preventDefault();
+    setTwoFactorError(null);
+    await executeWithdrawal(twoFactorInput);
+  };
+
+  const handleRegenerateTwoFactorCode = async () => {
+    try {
+      const res = await requestTwoFactorChallenge("withdrawal disbursement");
+      if (!res.ok) {
+        toast.error(res.error ?? "Unable to issue a new confirmation code.");
         return;
       }
       setTwoFactorInput("");
       setTwoFactorError(null);
-      setTwoFactorModalOpen(true);
-      return;
+      toast.success("Issued a fresh simulated 6-digit confirmation code.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to issue a new confirmation code.");
     }
-
-    executeWithdrawal();
   };
 
-  const handleConfirmTwoFactorWithdrawal = (e: FormEvent) => {
+  const handleBankSave = async (e: FormEvent) => {
     e.preventDefault();
-    setTwoFactorError(null);
-    executeWithdrawal(twoFactorInput);
-  };
-
-  const handleRegenerateTwoFactorCode = () => {
-    const res = requestTwoFactorChallenge("withdrawal disbursement");
-    if (!res.ok) {
-      toast.error(res.error ?? "Unable to issue a new confirmation code.");
-      return;
-    }
-    setTwoFactorInput("");
-    setTwoFactorError(null);
-    toast.success("Issued a fresh simulated 6-digit confirmation code.");
-  };
-
-  const handleBankSave = (e: FormEvent) => {
-    e.preventDefault();
+    if (bankSubmitting) return;
     setBankError(null);
     const bank = NIGERIAN_BANKS.find((b) => b.code === bankCode);
     if (!bank) {
@@ -223,24 +258,31 @@ export function WalletPage() {
       return;
     }
     setBankSubmitting(true);
-    const res = updateBankAccount({
-      bankCode: bank.code,
-      bankName: bank.name,
-      accountNumber: accountNumber.trim(),
-      accountName: accountName.trim().toUpperCase(),
-      verified: false,
-      verificationStatus: "Pending Verification",
-    });
-    setBankSubmitting(false);
-    if (!res.ok) {
-      const msg = res.error ?? "Could not save bank details.";
+    try {
+      const res = await updateBankAccount({
+        bankCode: bank.code,
+        bankName: bank.name,
+        accountNumber: accountNumber.trim(),
+        accountName: accountName.trim().toUpperCase(),
+        verified: false,
+        verificationStatus: "Pending Verification",
+      });
+      if (!res.ok) {
+        const msg = res.error ?? "Could not save bank details.";
+        setBankError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(
+        "Settlement bank account saved (format validated locally; live NIBSS verification pending backend integration).",
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save bank details.";
       setBankError(msg);
       toast.error(msg);
-      return;
+    } finally {
+      setBankSubmitting(false);
     }
-    toast.success(
-      "Settlement bank account saved (format validated locally; live NIBSS verification pending backend integration).",
-    );
   };
 
   const historyRows = userTransactions.filter((t) => {

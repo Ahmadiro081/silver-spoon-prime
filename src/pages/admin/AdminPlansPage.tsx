@@ -54,6 +54,7 @@ export function AdminPlansPage() {
   const [editForm, setEditForm] = useState<PlanFormValues>(DEFAULT_CREATE_FORM);
   const [editError, setEditError] = useState<string | null>(null);
   const [pauseTarget, setPauseTarget] = useState<InvestmentPlan | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const openEditModal = (plan: InvestmentPlan) => {
     setEditError(null);
@@ -89,49 +90,56 @@ export function AdminPlansPage() {
     return null;
   };
 
-  const handleCreate = (e: FormEvent) => {
+  const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     const err = validatePlanForm(createForm);
     if (err) {
       setCreateError(err);
       return;
     }
     setCreateError(null);
+    setSubmitting(true);
+    try {
+      const res = await adminCreatePlan({
+        name: createForm.name.trim(),
+        code: createForm.code.trim() || `SS-${Date.now().toString().slice(-4)}`,
+        category: createForm.category.trim() || "Fixed Income",
+        tagline: createForm.tagline.trim() || "Structured Naira allocation mandate",
+        description:
+          createForm.description.trim() ||
+          createForm.tagline.trim() ||
+          "Structured Naira allocation mandate governed by SILVER SPOON treasury desk.",
+        minAmount: Number(createForm.minAmount),
+        maxAmount: Number(createForm.maxAmount),
+        durationDays: Number(createForm.durationDays),
+        targetReturnPercent: Number(createForm.targetReturnPercent),
+        riskBand: createForm.riskBand,
+        payoutFrequency: createForm.payoutFrequency,
+        managementFeePercent: Number(createForm.managementFeePercent) || 0,
+        riskNote:
+          createForm.riskNote.trim() ||
+          "Illustrative target projection; market returns are not guaranteed.",
+      });
 
-    const res = adminCreatePlan({
-      name: createForm.name.trim(),
-      code: createForm.code.trim() || `SS-${Date.now().toString().slice(-4)}`,
-      category: createForm.category.trim() || "Fixed Income",
-      tagline: createForm.tagline.trim() || "Structured Naira allocation mandate",
-      description:
-        createForm.description.trim() ||
-        createForm.tagline.trim() ||
-        "Structured Naira allocation mandate governed by SILVER SPOON treasury desk.",
-      minAmount: Number(createForm.minAmount),
-      maxAmount: Number(createForm.maxAmount),
-      durationDays: Number(createForm.durationDays),
-      targetReturnPercent: Number(createForm.targetReturnPercent),
-      riskBand: createForm.riskBand,
-      payoutFrequency: createForm.payoutFrequency,
-      managementFeePercent: Number(createForm.managementFeePercent) || 0,
-      riskNote:
-        createForm.riskNote.trim() ||
-        "Illustrative target projection; market returns are not guaranteed.",
-    });
-
-    if (!res.ok) {
-      setCreateError(res.error ?? "Unable to create plan.");
-      return;
+      if (!res.ok) {
+        setCreateError(res.error ?? "Unable to create plan.");
+        return;
+      }
+      toast.success(`Created plan "${createForm.name.trim()}".`);
+      setCreating(false);
+      setCreateForm(DEFAULT_CREATE_FORM);
+      setCreateError(null);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Unable to create plan.");
+    } finally {
+      setSubmitting(false);
     }
-    toast.success(`Created plan "${createForm.name.trim()}".`);
-    setCreating(false);
-    setCreateForm(DEFAULT_CREATE_FORM);
-    setCreateError(null);
   };
 
-  const handleUpdate = (e: FormEvent) => {
+  const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingPlanId) return;
+    if (!editingPlanId || submitting) return;
 
     const err = validatePlanForm(editForm);
     if (err) {
@@ -139,31 +147,37 @@ export function AdminPlansPage() {
       return;
     }
     setEditError(null);
+    setSubmitting(true);
+    try {
+      const res = await adminUpdatePlan(editingPlanId, {
+        name: editForm.name.trim(),
+        code: editForm.code.trim(),
+        category: editForm.category.trim(),
+        tagline: editForm.tagline.trim(),
+        description: editForm.description.trim(),
+        minAmount: Number(editForm.minAmount),
+        maxAmount: Number(editForm.maxAmount),
+        durationDays: Number(editForm.durationDays),
+        targetReturnPercent: Number(editForm.targetReturnPercent),
+        riskBand: editForm.riskBand,
+        payoutFrequency: editForm.payoutFrequency,
+        managementFeePercent: Number(editForm.managementFeePercent) || 0,
+        riskNote: editForm.riskNote.trim(),
+        status: editForm.status,
+      });
 
-    const res = adminUpdatePlan(editingPlanId, {
-      name: editForm.name.trim(),
-      code: editForm.code.trim(),
-      category: editForm.category.trim(),
-      tagline: editForm.tagline.trim(),
-      description: editForm.description.trim(),
-      minAmount: Number(editForm.minAmount),
-      maxAmount: Number(editForm.maxAmount),
-      durationDays: Number(editForm.durationDays),
-      targetReturnPercent: Number(editForm.targetReturnPercent),
-      riskBand: editForm.riskBand,
-      payoutFrequency: editForm.payoutFrequency,
-      managementFeePercent: Number(editForm.managementFeePercent) || 0,
-      riskNote: editForm.riskNote.trim(),
-      status: editForm.status,
-    });
-
-    if (!res.ok) {
-      setEditError(res.error ?? "Unable to update investment plan.");
-      return;
+      if (!res.ok) {
+        setEditError(res.error ?? "Unable to update investment plan.");
+        return;
+      }
+      toast.success(`Updated investment plan "${editForm.name.trim()}".`);
+      setEditingPlanId(null);
+      setEditError(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Unable to update investment plan.");
+    } finally {
+      setSubmitting(false);
     }
-    toast.success(`Updated investment plan "${editForm.name.trim()}".`);
-    setEditingPlanId(null);
-    setEditError(null);
   };
 
   return (
@@ -252,9 +266,19 @@ export function AdminPlansPage() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        const res = adminTogglePlanStatus(plan.id, "Active");
-                        if (res.ok) toast.success(`${plan.name} reactivated.`);
+                      onClick={async () => {
+                        try {
+                          const res = await adminTogglePlanStatus(plan.id, "Active");
+                          if (res.ok) {
+                            toast.success(`${plan.name} reactivated.`);
+                          } else {
+                            toast.error(res.error ?? "Unable to activate plan.");
+                          }
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error ? error.message : "Unable to activate plan.",
+                          );
+                        }
                       }}
                       aria-label={`Activate ${plan.name}`}
                       className="h-9 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground hover:bg-primary/90"
@@ -328,15 +352,23 @@ export function AdminPlansPage() {
       <ConfirmDialog
         open={Boolean(pauseTarget)}
         onClose={() => setPauseTarget(null)}
-        onConfirm={() => {
-          if (!pauseTarget) return;
-          const res = adminTogglePlanStatus(pauseTarget.id, "Paused");
-          if (res.ok) {
-            toast.success(`${pauseTarget.name} paused for new subscriptions.`);
-          } else {
-            toast.error(res.error ?? "Unable to pause plan.");
+        busy={submitting}
+        onConfirm={async () => {
+          if (!pauseTarget || submitting) return;
+          setSubmitting(true);
+          try {
+            const res = await adminTogglePlanStatus(pauseTarget.id, "Paused");
+            if (res.ok) {
+              toast.success(`${pauseTarget.name} paused for new subscriptions.`);
+            } else {
+              toast.error(res.error ?? "Unable to pause plan.");
+            }
+            setPauseTarget(null);
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to pause plan.");
+          } finally {
+            setSubmitting(false);
           }
-          setPauseTarget(null);
         }}
         title="Pause Investment Plan?"
         subtitle={pauseTarget ? `${pauseTarget.name} (${pauseTarget.code})` : undefined}

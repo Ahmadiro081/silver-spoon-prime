@@ -79,62 +79,82 @@ export function AdminUsersPage() {
     setKycNote(user.kycNote ?? "");
   };
 
-  const handleStatusChange = (user: UserProfile, next: AccountStatus) => {
-    const res = adminUpdateUserStatus(user.id, next);
-    if (res.ok) {
-      toast.success(`${user.fullName} set to ${next}.`);
-    } else {
-      toast.error(res.error ?? "Unable to update status.");
+  const handleStatusChange = async (user: UserProfile, next: AccountStatus) => {
+    try {
+      const res = await adminUpdateUserStatus(user.id, next);
+      if (res.ok) {
+        toast.success(`${user.fullName} set to ${next}.`);
+      } else {
+        toast.error(res.error ?? "Unable to update status.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update status.");
     }
   };
 
-  const handleTierChange = (user: UserProfile, tier: UserProfile["tier"]) => {
-    const res = adminUpdateUserTier(user.id, tier);
-    if (res.ok) {
-      toast.success(`${user.fullName} moved to ${tier} tier.`);
-    } else {
-      toast.error(res.error ?? "Unable to update client tier.");
+  const handleTierChange = async (user: UserProfile, tier: UserProfile["tier"]) => {
+    try {
+      const res = await adminUpdateUserTier(user.id, tier);
+      if (res.ok) {
+        toast.success(`${user.fullName} moved to ${tier} tier.`);
+      } else {
+        toast.error(res.error ?? "Unable to update client tier.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update client tier.");
     }
   };
 
-  const handleSaveKycReview = (e: FormEvent) => {
+  const handleSaveKycReview = async (e: FormEvent) => {
     e.preventDefault();
     if (!inspectedUser) return;
 
-    const kycRes = adminReviewUserKyc(inspectedUser.id, {
-      status: kycStatus,
-      kycLevel,
-      note: kycNote.trim() || undefined,
-    });
-    if (!kycRes.ok) {
-      toast.error(kycRes.error ?? "Unable to save KYC review.");
-      return;
-    }
+    try {
+      const kycRes = await adminReviewUserKyc(inspectedUser.id, {
+        status: kycStatus,
+        kycLevel,
+        note: kycNote.trim() || undefined,
+      });
+      if (!kycRes.ok) {
+        toast.error(kycRes.error ?? "Unable to save KYC review.");
+        return;
+      }
 
-    if (kycTier !== inspectedUser.tier) {
-      adminUpdateUserTier(inspectedUser.id, kycTier);
-    }
+      if (kycTier !== inspectedUser.tier) {
+        const tierRes = await adminUpdateUserTier(inspectedUser.id, kycTier);
+        if (!tierRes.ok) {
+          toast.error(tierRes.error ?? "KYC saved, but unable to update client tier.");
+          return;
+        }
+      }
 
-    toast.success(`Compliance & KYC review saved for ${inspectedUser.fullName}.`);
+      toast.success(`Compliance & KYC review saved for ${inspectedUser.fullName}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to save KYC review.");
+    }
   };
 
-  const handleQuickApproveKyc = () => {
+  const handleQuickApproveKyc = async () => {
     if (!inspectedUser) return;
     const nextLevel: UserProfile["kycLevel"] =
       inspectedUser.kycLevel === "Tier 1" ? "Tier 2" : inspectedUser.kycLevel;
     const note = kycNote.trim() || "Identity and BVN documentation approved by compliance desk.";
-    const res = adminReviewUserKyc(inspectedUser.id, {
-      status: "Active",
-      kycLevel: nextLevel,
-      note,
-    });
-    if (res.ok) {
-      setKycStatus("Active");
-      setKycLevel(nextLevel);
-      setKycNote(note);
-      toast.success(`Approved ${inspectedUser.fullName} (${nextLevel}, Active).`);
-    } else {
-      toast.error(res.error ?? "Unable to approve KYC.");
+    try {
+      const res = await adminReviewUserKyc(inspectedUser.id, {
+        status: "Active",
+        kycLevel: nextLevel,
+        note,
+      });
+      if (res.ok) {
+        setKycStatus("Active");
+        setKycLevel(nextLevel);
+        setKycNote(note);
+        toast.success(`Approved ${inspectedUser.fullName} (${nextLevel}, Active).`);
+      } else {
+        toast.error(res.error ?? "Unable to approve KYC.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to approve KYC.");
     }
   };
 
@@ -407,14 +427,20 @@ export function AdminUsersPage() {
                     {!inspectedUser.bankAccount.verified && (
                       <button
                         type="button"
-                        onClick={() => {
-                          const res = adminVerifyUserBankAccount(inspectedUser.id);
-                          if (res.ok) {
-                            toast.success(
-                              `Marked ${inspectedUser.fullName}'s bank account as Simulated Verified.`,
+                        onClick={async () => {
+                          try {
+                            const res = await adminVerifyUserBankAccount(inspectedUser.id);
+                            if (res.ok) {
+                              toast.success(
+                                `Marked ${inspectedUser.fullName}'s bank account as Simulated Verified.`,
+                              );
+                            } else {
+                              toast.error(res.error ?? "Unable to update bank status.");
+                            }
+                          } catch (err) {
+                            toast.error(
+                              err instanceof Error ? err.message : "Unable to update bank status.",
                             );
-                          } else {
-                            toast.error(res.error ?? "Unable to update bank status.");
                           }
                         }}
                         className="mt-3 inline-flex h-8 items-center rounded-md border border-border bg-card px-2.5 text-[11px] font-medium text-foreground hover:bg-secondary"
@@ -731,9 +757,9 @@ export function AdminUsersPage() {
       <ConfirmDialog
         open={Boolean(suspendTarget)}
         onClose={() => setSuspendTarget(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!suspendTarget) return;
-          handleStatusChange(suspendTarget, "Suspended");
+          await handleStatusChange(suspendTarget, "Suspended");
           setSuspendTarget(null);
         }}
         title="Suspend Investor Account?"

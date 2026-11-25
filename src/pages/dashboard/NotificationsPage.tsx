@@ -8,9 +8,20 @@ import { formatDateTime } from "@/utils/format";
 export function NotificationsPage() {
   const { userNotifications, markNotificationRead, markAllNotificationsRead } = useAppState();
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [markingAll, setMarkingAll] = useState(false);
 
   const unreadCount = userNotifications.filter((n) => !n.read).length;
   const items = userNotifications.filter((n) => (filter === "unread" ? !n.read : true));
+
+  const handleMarkAllRead = async () => {
+    if (markingAll || unreadCount === 0) return;
+    setMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+    } finally {
+      setMarkingAll(false);
+    }
+  };
 
   return (
     <UserDashboardLayout
@@ -19,12 +30,14 @@ export function NotificationsPage() {
       action={
         <button
           type="button"
-          onClick={markAllNotificationsRead}
-          disabled={unreadCount === 0}
+          onClick={() => {
+            void handleMarkAllRead();
+          }}
+          disabled={unreadCount === 0 || markingAll}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
         >
           <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
-          Mark All Read
+          {markingAll ? "Marking..." : "Mark All Read"}
         </button>
       }
     >
@@ -84,7 +97,9 @@ export function NotificationsPage() {
                   <button
                     type="button"
                     aria-label={`Mark "${item.title}" as read`}
-                    onClick={() => markNotificationRead(item.id)}
+                    onClick={() => {
+                      void markNotificationRead(item.id);
+                    }}
                     className="shrink-0 text-xs font-medium text-foreground underline underline-offset-4 hover:text-primary"
                   >
                     Mark read

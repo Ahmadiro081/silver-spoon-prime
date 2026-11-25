@@ -10,16 +10,25 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const res = requestPasswordReset(email);
-    if (!res.ok || !res.data) {
-      setError(res.error ?? "Unable to dispatch recovery token.");
-      return;
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await requestPasswordReset(email);
+      if (!res.ok || !res.data) {
+        setError(res.error ?? "Unable to dispatch recovery token.");
+        return;
+      }
+      setError(null);
+      setResetToken(res.data.resetToken);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to dispatch recovery token.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(null);
-    setResetToken(res.data.resetToken);
   };
 
   return (
@@ -80,9 +89,10 @@ export function ForgotPasswordPage() {
           </div>
           <button
             type="submit"
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={submitting}
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Send Recovery Token
+            {submitting ? "Sending Token..." : "Send Recovery Token"}
           </button>
         </form>
       )}
