@@ -22,6 +22,7 @@ import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
 import { TestEnvironmentBanner } from "@/components/common/TestEnvironmentBanner";
 import { useAppState } from "@/context/AppStateContext";
+import { formatStaffRoleLabel } from "@/services/dataProvider";
 import { handleFocusTrapKeyDown } from "@/utils/accessibility";
 
 interface AdminNavGroup {
@@ -75,7 +76,15 @@ export function AdminDashboardLayout({
   const drawerRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { currentUser, users, transactions, kycSubmissions, logout } = useAppState();
+  const {
+    currentUser,
+    users,
+    transactions,
+    kycSubmissions,
+    adminReadData,
+    refreshAdminReadData,
+    logout,
+  } = useAppState();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -199,7 +208,9 @@ export function AdminDashboardLayout({
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-foreground">{currentUser.fullName}</p>
-            <p className="truncate text-[11px] text-muted-foreground">Administrator · Ops</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {formatStaffRoleLabel(adminReadData.effectiveRole)}
+            </p>
           </div>
           <button
             type="button"
@@ -291,6 +302,32 @@ export function AdminDashboardLayout({
           tabIndex={-1}
           className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8"
         >
+          {(adminReadData.isDisconnected ||
+            adminReadData.isForbidden ||
+            adminReadData.status === "session_expired" ||
+            adminReadData.status === "error") && (
+            <div
+              role="alert"
+              className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground"
+            >
+              <span>
+                {adminReadData.isDisconnected
+                  ? adminReadData.disconnectedReason ??
+                    "Administrative read provider is in disconnected standby mode."
+                  : adminReadData.error?.message ??
+                    "Unable to synchronize administrative read-only data."}
+              </span>
+              {adminReadData.error?.recoverable && (
+                <button
+                  type="button"
+                  onClick={() => void refreshAdminReadData()}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+                >
+                  Retry Sync
+                </button>
+              )}
+            </div>
+          )}
           {children}
         </main>
       </div>

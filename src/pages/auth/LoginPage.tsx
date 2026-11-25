@@ -14,7 +14,9 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const fromPath = (location.state as { from?: string } | null)?.from;
+  const routeState = location.state as { from?: string; sessionExpired?: boolean } | null;
+  const fromPath = routeState?.from;
+  const sessionExpiredNotice = Boolean(routeState?.sessionExpired);
 
   const resolveDestination = (role: "investor" | "admin") => {
     if (fromPath) {
@@ -64,6 +66,14 @@ export function LoginPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {sessionExpiredNotice && !error && (
+          <div
+            role="status"
+            className="rounded-lg border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-xs text-foreground"
+          >
+            Your previous session expired. Sign in again to continue.
+          </div>
+        )}
         {error && <FormAlert>{error}</FormAlert>}
 
         <div>

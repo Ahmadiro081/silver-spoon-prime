@@ -75,15 +75,23 @@ function UnauthorizedRoleView({
 }
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, authenticatedUser } = useAppState();
+  const { session, authenticatedUser, authState } = useAppState();
   const location = useLocation();
 
-  if (!session.authenticated || !authenticatedUser) {
+  if (
+    !session.authenticated ||
+    !authenticatedUser ||
+    !authState.authenticated ||
+    authState.sessionExpired
+  ) {
     return (
       <Navigate
         to="/login"
         replace
-        state={{ from: `${location.pathname}${location.search}` }}
+        state={{
+          from: `${location.pathname}${location.search}`,
+          sessionExpired: authState.sessionExpired,
+        }}
       />
     );
   }

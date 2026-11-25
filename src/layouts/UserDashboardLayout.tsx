@@ -54,7 +54,13 @@ export function UserDashboardLayout({
   const drawerRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { currentUser, unreadNotificationCount, logout } = useAppState();
+  const {
+    currentUser,
+    unreadNotificationCount,
+    investorReadData,
+    refreshInvestorReadData,
+    logout,
+  } = useAppState();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -245,6 +251,32 @@ export function UserDashboardLayout({
           tabIndex={-1}
           className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8"
         >
+          {investorReadData.isDisconnected && investorReadData.disconnectedReason && (
+            <div
+              role="alert"
+              className="mb-4 flex flex-col justify-between gap-2 rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-foreground"
+            >
+              <span className="font-semibold">
+                Supabase Data Provider — Disconnected Standby
+              </span>
+              <span className="text-muted-foreground">{investorReadData.disconnectedReason}</span>
+            </div>
+          )}
+          {!investorReadData.isDisconnected && investorReadData.error?.recoverable && (
+            <div
+              role="alert"
+              className="mb-4 flex flex-col justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs sm:flex-row sm:items-center"
+            >
+              <span className="text-foreground">{investorReadData.error.message}</span>
+              <button
+                type="button"
+                onClick={() => void refreshInvestorReadData()}
+                className="shrink-0 font-semibold text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                Retry Sync
+              </button>
+            </div>
+          )}
           {currentUser.emailVerified === false && (
             <div
               role="status"

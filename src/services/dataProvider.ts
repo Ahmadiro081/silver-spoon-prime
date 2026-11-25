@@ -1,4 +1,33 @@
 import {
+  createAdminReadOrchestrator,
+  createInitialAdminReadSnapshot,
+  formatStaffRoleLabel,
+  type AdminReadOnlyOrchestrator,
+  type AdminReadSnapshot,
+  type AdminReportId,
+} from "@/services/admin/index";
+import {
+  authAdapters,
+  createUnauthenticatedOnboardingState,
+  InvalidAuthProviderError,
+  isAuthSessionExpired,
+  mapMockUserToAuthUser,
+  resolveAuthAdapter,
+  type AuthContract,
+  type AuthError,
+  type AuthEventType,
+  type AuthResult,
+  type AuthSession,
+  type AuthStateModel,
+  type AuthUser,
+} from "@/services/auth/index";
+import {
+  createInitialInvestorReadSnapshot,
+  createInvestorReadOrchestrator,
+  type InvestorReadOnlyOrchestrator,
+  type InvestorReadSnapshot,
+} from "@/services/investor/index";
+import {
   createSeedSnapshot,
   mockDataProvider,
   type MockDataProviderContract,
@@ -17,7 +46,35 @@ import {
 } from "@/services/supabase/supabaseDataProvider";
 import type { ServiceResult } from "@/types/domain";
 
-export type { DataProviderId, MockDataSnapshot };
+export type {
+  AdminReadOnlyOrchestrator,
+  AdminReadSnapshot,
+  AdminReportId,
+  AuthContract,
+  AuthError,
+  AuthEventType,
+  AuthResult,
+  AuthSession,
+  AuthStateModel,
+  AuthUser,
+  DataProviderId,
+  InvestorReadOnlyOrchestrator,
+  InvestorReadSnapshot,
+  MockDataSnapshot,
+};
+export {
+  authAdapters,
+  createAdminReadOrchestrator,
+  createInitialAdminReadSnapshot,
+  createInitialInvestorReadSnapshot,
+  createInvestorReadOrchestrator,
+  createUnauthenticatedOnboardingState,
+  formatStaffRoleLabel,
+  InvalidAuthProviderError,
+  isAuthSessionExpired,
+  mapMockUserToAuthUser,
+  resolveAuthAdapter,
+};
 export const createEmptyPlatformSnapshot = createSeedSnapshot;
 
 /**
@@ -112,6 +169,40 @@ export function resolveDataProvider(
     );
   }
   return dataProviders[cfg.activeProvider];
+}
+
+/**
+ * Resolves the Phase 6.5 Investor Read-Only Orchestrator for the active provider.
+ * Throws `InvalidDataProviderError` for unrecognized `VITE_DATA_PROVIDER` values.
+ */
+export function resolveInvestorReadOrchestrator(
+  envOverride?: Record<string, unknown>,
+): InvestorReadOnlyOrchestrator {
+  const cfg = getSupabasePublicConfig(envOverride);
+  if (!cfg.providerValid || !cfg.activeProvider) {
+    throw new InvalidDataProviderError(
+      cfg.rawRequestedProvider ?? "(unknown)",
+      cfg.configError ?? undefined,
+    );
+  }
+  return createInvestorReadOrchestrator({ env: envOverride });
+}
+
+/**
+ * Resolves the Phase 6.6 Administrative Read-Only Orchestrator for the active provider.
+ * Throws `InvalidDataProviderError` for unrecognized `VITE_DATA_PROVIDER` values.
+ */
+export function resolveAdminReadOrchestrator(
+  envOverride?: Record<string, unknown>,
+): AdminReadOnlyOrchestrator {
+  const cfg = getSupabasePublicConfig(envOverride);
+  if (!cfg.providerValid || !cfg.activeProvider) {
+    throw new InvalidDataProviderError(
+      cfg.rawRequestedProvider ?? "(unknown)",
+      cfg.configError ?? undefined,
+    );
+  }
+  return createAdminReadOrchestrator({ env: envOverride });
 }
 
 export interface AsyncOperationGuard {

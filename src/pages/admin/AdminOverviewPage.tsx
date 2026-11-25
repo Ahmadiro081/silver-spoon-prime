@@ -17,27 +17,36 @@ import { buildPlatformMonthlyMetrics, calculateUserWalletMetrics } from "@/utils
 import { formatCompactNaira, formatDateTime, formatNaira } from "@/utils/format";
 
 export function AdminOverviewPage() {
-  const { users, transactions, investments, auditLogs, kycSubmissions } = useAppState();
+  const { users, transactions, investments, auditLogs, kycSubmissions, adminReadData } = useAppState();
 
   const investors = users.filter((u) => u.role === "investor");
-  const totalAum = investors.reduce((sum, u) => {
-    const uTxns = transactions.filter((t) => t.userId === u.id);
-    const uInvs = investments.filter((i) => i.userId === u.id);
-    return sum + calculateUserWalletMetrics(uTxns, uInvs).totalWalletBalance;
-  }, 0);
+  const overview = adminReadData.overview;
+  const totalAum =
+    overview?.financialTotals?.totalAumNaira ??
+    investors.reduce((sum, u) => {
+      const uTxns = transactions.filter((t) => t.userId === u.id);
+      const uInvs = investments.filter((i) => i.userId === u.id);
+      return sum + calculateUserWalletMetrics(uTxns, uInvs).totalWalletBalance;
+    }, 0);
 
-  const totalDeposits = transactions
-    .filter((t) => t.type === "Deposit" && t.status === "Completed")
-    .reduce((s, t) => s + t.amount, 0);
+  const totalDeposits =
+    overview?.financialTotals?.confirmedDepositsNaira ??
+    transactions
+      .filter((t) => t.type === "Deposit" && t.status === "Completed")
+      .reduce((s, t) => s + t.amount, 0);
 
   const pendingDeposits = transactions.filter((t) => t.type === "Deposit" && t.status === "Pending");
   const pendingWithdrawals = transactions.filter(
     (t) => t.type === "Withdrawal" && t.status === "Pending",
   );
-  const pendingKycCount = kycSubmissions.filter((s) => s.status === "Under Review").length;
-  const activeMandatesValue = investments
-    .filter((i) => i.status === "Active")
-    .reduce((s, i) => s + i.principal, 0);
+  const pendingKycCount =
+    overview?.queueCounts.pendingKycReviews ??
+    kycSubmissions.filter((s) => s.status === "Under Review").length;
+  const activeMandatesValue =
+    overview?.financialTotals?.activeMandatesNaira ??
+    investments
+      .filter((i) => i.status === "Active")
+      .reduce((s, i) => s + i.principal, 0);
 
   const monthlyFlows = useMemo(
     () => buildPlatformMonthlyMetrics(users, transactions, investments),

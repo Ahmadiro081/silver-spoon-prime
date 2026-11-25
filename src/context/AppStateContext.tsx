@@ -1,5 +1,12 @@
 import { createContext, useContext } from "react";
-import type { DataProviderId } from "@/services/dataProvider";
+import type {
+  AdminReadSnapshot,
+  AuthResult,
+  AuthSession,
+  AuthStateModel,
+  DataProviderId,
+  InvestorReadSnapshot,
+} from "@/services/dataProvider";
 import type { PlatformServiceContract } from "@/services/platformService";
 import type {
   AuditLogEntry,
@@ -27,6 +34,19 @@ export interface AppStateContextValue extends PlatformServiceContract {
   isOperationPending: (operationKey: string) => boolean;
   lastError: string | null;
   clearLastError: () => void;
+
+  // Centralized authentication & session state model (Phase 6.4)
+  authState: AuthStateModel;
+  refreshSession: () => Promise<AuthResult<AuthSession | null>>;
+  clearAuthError: () => void;
+
+  // Investor read-only orchestrated dataset (Phase 6.5)
+  investorReadData: InvestorReadSnapshot;
+  refreshInvestorReadData: () => Promise<void>;
+
+  // Administrative & staff read-only orchestrated dataset (Phase 6.6)
+  adminReadData: AdminReadSnapshot;
+  refreshAdminReadData: () => Promise<void>;
 
   // Domain state snapshot
   session: SessionState;

@@ -1,4 +1,5 @@
 export type UserRole = "investor" | "admin";
+export type StaffRole = "super_admin" | "admin" | "finance_officer" | "compliance_officer";
 export type AccountStatus = "Active" | "Pending KYC" | "Suspended";
 export type RiskBand = "Low" | "Moderate" | "Elevated";
 export type PlanStatus = "Active" | "Paused" | "Archived";
@@ -73,6 +74,7 @@ export interface UserProfile {
   city: string;
   address: string;
   role: UserRole;
+  staffRole?: StaffRole;
   tier: "Silver" | "Platinum" | "Sovereign";
   status: AccountStatus;
   kycLevel: "Tier 1" | "Tier 2" | "Tier 3";
@@ -287,6 +289,8 @@ export interface SessionState {
   authenticated: boolean;
   userId: string;
   role: UserRole;
+  issuedAt?: string;
+  expiresAt?: string;
 }
 
 export interface ServiceResult<T = undefined> {

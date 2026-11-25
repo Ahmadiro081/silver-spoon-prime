@@ -6,3 +6,4 @@ export * from "@/services/supabase/dbTypes";
 export * from "@/services/supabase/mappers/index";
 export * from "@/services/supabase/queries";
 export * from "@/services/supabase/supabaseDataProvider";
+export * from "@/services/supabase/auth/index";

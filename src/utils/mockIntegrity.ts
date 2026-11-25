@@ -181,6 +181,7 @@ export function selectIsolatedAccountView(
 export function sanitizeRestoredSession(
   rawSession: Partial<SessionState> | undefined,
   users: UserProfile[],
+  nowMs: number = Date.now(),
 ): SessionState {
   if (!rawSession || typeof rawSession !== "object" || users.length === 0) {
     return {
@@ -203,11 +204,30 @@ export function sanitizeRestoredSession(
     };
   }
 
-  return {
+  // Reject expired sessions cleanly on restore
+  if (typeof rawSession.expiresAt === "string" && rawSession.expiresAt.trim().length > 0) {
+    const expiresAtMs = Date.parse(rawSession.expiresAt);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) {
+      return {
+        authenticated: false,
+        userId: "",
+        role: "investor",
+      };
+    }
+  }
+
+  const restored: SessionState = {
     authenticated: true,
     userId: matched.id,
     role: matched.role,
   };
+  if (typeof rawSession.issuedAt === "string" && rawSession.issuedAt.trim().length > 0) {
+    restored.issuedAt = rawSession.issuedAt;
+  }
+  if (typeof rawSession.expiresAt === "string" && rawSession.expiresAt.trim().length > 0) {
+    restored.expiresAt = rawSession.expiresAt;
+  }
+  return restored;
 }
 
 function collectDuplicateIds(items: { id: string }[], entity: string, issues: IntegrityIssue[]) {

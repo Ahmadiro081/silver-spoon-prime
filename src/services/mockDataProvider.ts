@@ -10,6 +10,14 @@ import {
   INITIAL_USERS,
 } from "@/data/mockDatabase";
 import {
+  clearMockVerifiers,
+  createMockPasswordVerifier,
+  loadMockVerifierMap,
+  saveMockVerifier,
+  verifyMockPassword,
+  type MockPasswordVerifierRecord,
+} from "@/services/auth/mockCredentialVerifier";
+import {
   buildInvestmentRecord,
   buildMaturitySettlementBundle,
   buildTransactionRecord,
@@ -218,15 +226,67 @@ export function createMockDataProvider(options?: {
   const defaultStorage = options?.storage;
   const listeners = new Set<SnapshotListener>();
   let currentState: MockDataSnapshot | null = null;
+  // Transient in-memory credential map ONLY for synchronous saveSnapshot test fixtures;
+  // registered/reset/changed mock passwords use salted Web Crypto PBKDF2 verifiers (zero plaintext).
+  const transientFixtureCredentials = new Map<string, string>();
+  const inMemoryVerifiers = new Map<string, MockPasswordVerifierRecord>();
+  const MOCK_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+  const stripPasswordField = (user: UserProfile): UserProfile => {
+    if (!("password" in user)) return user;
+    const { password: _omitted, ...safeUser } = user;
+    void _omitted;
+    return safeUser;
+  };
+
+  const getVerifierForUser = (userId: string): MockPasswordVerifierRecord | null => {
+    const cached = inMemoryVerifiers.get(userId);
+    if (cached) return cached;
+    const storage = resolveStorage(defaultStorage);
+    const persisted = loadMockVerifierMap(storage)[userId];
+    if (persisted) {
+      inMemoryVerifiers.set(userId, persisted);
+      return persisted;
+    }
+    return null;
+  };
+
+  const persistPasswordVerifier = async (userId: string, password: string): Promise<void> => {
+    const verifier = await createMockPasswordVerifier(password);
+    inMemoryVerifiers.set(userId, verifier);
+    transientFixtureCredentials.delete(userId);
+    const storage = resolveStorage(defaultStorage);
+    saveMockVerifier(storage, userId, verifier);
+  };
+
+  const verifyUserPassword = async (userId: string, candidatePassword: string): Promise<boolean> => {
+    const verifier = getVerifierForUser(userId);
+    if (verifier) {
+      return verifyMockPassword(candidatePassword, verifier);
+    }
+    const transient = transientFixtureCredentials.get(userId);
+    if (transient !== undefined) {
+      return candidatePassword === transient;
+    }
+    return false;
+  };
 
   const getSeedSnapshot = (): MockDataSnapshot => createSeedSnapshot();
 
   const saveSnapshot = (snapshot: MockDataSnapshot, storageOverride?: StorageLike): void => {
+    // Capture any transient test-fixture passwords synchronously without writing plaintext to storage.
+    for (const u of snapshot.users) {
+      if (typeof u.password === "string" && u.password.length > 0) {
+        transientFixtureCredentials.set(u.id, u.password);
+      }
+    }
+
     const storage = resolveStorage(storageOverride ?? defaultStorage);
     if (!storage) return;
     try {
       const payload: MockDataSnapshot = {
         ...snapshot,
+        users: snapshot.users.map(stripPasswordField),
         schemaVersion: MOCK_SCHEMA_VERSION,
       };
       storage.setItem(MOCK_STORAGE_KEY, JSON.stringify(payload));
@@ -271,12 +331,14 @@ export function createMockDataProvider(options?: {
         .filter((u): u is UserProfile =>
           Boolean(u && typeof u.id === "string" && typeof u.email === "string"),
         )
-        .map((u) => ({
-          ...u,
-          password: typeof u.password === "string" ? u.password : "",
-          emailVerified: Boolean(u.emailVerified),
-          bankAccount: hydrateBankAccount(u.bankAccount),
-        }));
+        .map((u) => {
+          const safeUser = stripPasswordField(u);
+          return {
+            ...safeUser,
+            emailVerified: Boolean(safeUser.emailVerified),
+            bankAccount: hydrateBankAccount(safeUser.bankAccount),
+          };
+        });
 
       const hydratedNotifications = Array.isArray(parsed.notifications)
         ? parsed.notifications.map(hydrateNotification)
@@ -321,12 +383,15 @@ export function createMockDataProvider(options?: {
     if (storage) {
       try {
         storage.removeItem(MOCK_STORAGE_KEY);
+        clearMockVerifiers(storage);
         saveSnapshot(cleanSnapshot, storage);
       } catch {
         // Ignore storage errors
       }
     }
     if (!storageOverride) {
+      transientFixtureCredentials.clear();
+      inMemoryVerifiers.clear();
       currentState = cleanSnapshot;
       for (const listener of listeners) {
         listener(cleanSnapshot);
@@ -353,7 +418,15 @@ export function createMockDataProvider(options?: {
 
   const getAuthenticatedUser = (state: MockDataSnapshot): UserProfile | null => {
     if (!state.session.authenticated) return null;
-    return state.users.find((u) => u.id === state.session.userId) ?? null;
+    if (typeof state.session.expiresAt === "string" && state.session.expiresAt.trim().length > 0) {
+      const expiresAtMs = Date.parse(state.session.expiresAt);
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        return null;
+      }
+    }
+    const matched = state.users.find((u) => u.id === state.session.userId) ?? null;
+    if (!matched || matched.status === "Suspended") return null;
+    return matched;
   };
 
   const requireAdminActor = (state: MockDataSnapshot): UserProfile | null => {
@@ -403,7 +476,8 @@ export function createMockDataProvider(options?: {
       const normalized = email.trim().toLowerCase();
       const matched = state.users.find((u) => u.email.toLowerCase() === normalized);
 
-      if (!matched || !matched.password || password !== matched.password) {
+      const passwordMatches = matched ? await verifyUserPassword(matched.id, password) : false;
+      if (!matched || !passwordMatches) {
         return {
           ok: false,
           error:
@@ -418,12 +492,20 @@ export function createMockDataProvider(options?: {
         };
       }
 
-      const now = new Date().toISOString();
-      const updatedUser: UserProfile = { ...matched, lastLoginAt: now };
+      const nowMs = Date.now();
+      const now = new Date(nowMs).toISOString();
+      const expiresAt = new Date(nowMs + MOCK_SESSION_TTL_MS).toISOString();
+      const updatedUser: UserProfile = stripPasswordField({ ...matched, lastLoginAt: now });
 
       commitState({
         ...state,
-        session: { authenticated: true, userId: matched.id, role: matched.role },
+        session: {
+          authenticated: true,
+          userId: matched.id,
+          role: matched.role,
+          issuedAt: now,
+          expiresAt,
+        },
         users: state.users.map((u) => (u.id === matched.id ? updatedUser : u)),
       });
       return { ok: true, data: updatedUser };
@@ -463,12 +545,16 @@ export function createMockDataProvider(options?: {
           .toUpperCase()
           .slice(0, 6) || "CLIENT";
 
-      const now = new Date().toISOString();
+      const nowMs = Date.now();
+      const now = new Date(nowMs).toISOString();
+      const expiresAt = new Date(nowMs + MOCK_SESSION_TTL_MS).toISOString();
+      const newUserId = generateId("USR");
+      await persistPasswordVerifier(newUserId, payload.password);
+
       const newUser: UserProfile = {
-        id: generateId("USR"),
+        id: newUserId,
         fullName: payload.fullName.trim(),
         email: emailNormalized,
-        password: payload.password,
         emailVerified: false,
         phone: payload.phone.trim() || "+234 800 000 0000",
         city: "Lagos",
@@ -507,7 +593,13 @@ export function createMockDataProvider(options?: {
 
       commitState({
         ...state,
-        session: { authenticated: true, userId: newUser.id, role: "investor" },
+        session: {
+          authenticated: true,
+          userId: newUser.id,
+          role: "investor",
+          issuedAt: now,
+          expiresAt,
+        },
         users: [newUser, ...state.users],
         verificationCodes: {
           ...state.verificationCodes,
@@ -705,11 +797,12 @@ export function createMockDataProvider(options?: {
 
       const nextTokens = { ...state.resetTokens };
       delete nextTokens[normalized];
+      await persistPasswordVerifier(target.id, newPassword);
 
       commitState({
         ...state,
         resetTokens: nextTokens,
-        users: state.users.map((u) => (u.id === target.id ? { ...u, password: newPassword } : u)),
+        users: state.users.map((u) => (u.id === target.id ? stripPasswordField(u) : u)),
         notifications: [
           {
             id: generateId("NTF"),
@@ -741,7 +834,8 @@ export function createMockDataProvider(options?: {
       if (!authenticatedUser) {
         return { ok: false, error: "You must be signed in to update your password." };
       }
-      if (!authenticatedUser.password || currentPassword !== authenticatedUser.password) {
+      const currentValid = await verifyUserPassword(authenticatedUser.id, currentPassword);
+      if (!currentValid) {
         return { ok: false, error: "Current password is incorrect." };
       }
       if (newPassword.length < 8) {
@@ -751,10 +845,12 @@ export function createMockDataProvider(options?: {
         return { ok: false, error: "New password must differ from your current password." };
       }
 
+      await persistPasswordVerifier(authenticatedUser.id, newPassword);
+
       commitState({
         ...state,
         users: state.users.map((u) =>
-          u.id === authenticatedUser.id ? { ...u, password: newPassword } : u,
+          u.id === authenticatedUser.id ? stripPasswordField(u) : u,
         ),
         notifications: [
           {
@@ -872,11 +968,11 @@ export function createMockDataProvider(options?: {
       if (!authenticatedUser.twoFactorEnabled) {
         return { ok: false, error: "Simulated two-factor authentication is already disabled." };
       }
-      if (
-        !authenticatedUser.password ||
-        !currentPassword.trim() ||
-        currentPassword !== authenticatedUser.password
-      ) {
+      const currentValid =
+        currentPassword.trim().length > 0
+          ? await verifyUserPassword(authenticatedUser.id, currentPassword)
+          : false;
+      if (!currentValid) {
         return {
           ok: false,
           error: "Current password is incorrect. Password confirmation is required to disable 2FA.",

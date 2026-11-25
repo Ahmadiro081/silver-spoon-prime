@@ -1,15 +1,19 @@
+import type { AdminReadOnlyQueryContract } from "@/services/admin/types";
 import {
   createSeedSnapshot,
   type MockDataSnapshot,
   type SnapshotListener,
 } from "@/services/mockDataProvider";
 import type { PlatformServiceContract } from "@/services/platformService";
+import { createStandbyAdminReadOnlyQueryClient } from "@/services/supabase/adminReadStandbyAdapter";
 import { getSupabaseClient, type SupabaseClientFactory } from "@/services/supabase/client";
 import type { SupabaseActivationGuardState } from "@/services/supabase/config";
 import {
   createStandbyReadOnlyQueryClient,
   type SupabaseReadOnlyQueryContract,
 } from "@/services/supabase/queries";
+import { createStandbyFinancialWriteAdapter } from "@/services/supabase/writeStandbyAdapter";
+import type { FinancialWriteStandbyContract } from "@/services/writes/types";
 import type { ServiceResult } from "@/types/domain";
 
 /**
@@ -84,6 +88,8 @@ export interface SupabaseDataProviderContract extends PlatformServiceContract {
   readonly standbyMode: true;
   readonly rpcBindingMap: Record<keyof PlatformServiceContract, string>;
   readonly readQueries: SupabaseReadOnlyQueryContract;
+  readonly adminReadQueries: AdminReadOnlyQueryContract;
+  readonly writeStandby: FinancialWriteStandbyContract;
   getActivationGuard: () => SupabaseActivationGuardState;
   getClientFactory: () => SupabaseClientFactory;
   isConfigured: () => boolean;
@@ -94,12 +100,16 @@ export interface SupabaseDataProviderContract extends PlatformServiceContract {
 
 const standbySnapshot: MockDataSnapshot = createSeedSnapshot();
 const standbyReadQueries: SupabaseReadOnlyQueryContract = createStandbyReadOnlyQueryClient();
+const standbyAdminReadQueries: AdminReadOnlyQueryContract = createStandbyAdminReadOnlyQueryClient();
+const standbyWriteAdapter: FinancialWriteStandbyContract = createStandbyFinancialWriteAdapter();
 
 export const supabaseDataProvider: SupabaseDataProviderContract = {
   id: "supabase",
   standbyMode: true,
   rpcBindingMap: SUPABASE_RPC_BINDING_MAP,
   readQueries: standbyReadQueries,
+  adminReadQueries: standbyAdminReadQueries,
+  writeStandby: standbyWriteAdapter,
   getActivationGuard: () => getSupabaseClient().getActivationGuard(),
   getClientFactory: () => getSupabaseClient().getFactory(),
   isConfigured: () => getSupabaseClient().isConfigured(),
